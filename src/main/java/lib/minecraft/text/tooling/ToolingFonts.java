@@ -47,7 +47,10 @@ import java.nio.file.Path;
 public final class ToolingFonts {
 
     private static final @NotNull String REPO_URL = "https://github.com/minecraft-library/font-generator.git";
-    private static final @NotNull String DEFAULT_VERSION = "26.1";
+
+    /** Default Minecraft version generated when {@link #main} is invoked without an argument and the version used by {@link lib.minecraft.text.font.MinecraftFont}'s runtime bootstrap. */
+    public static final @NotNull String DEFAULT_VERSION = "26.1";
+
     private static final @NotNull String CLONE_DIR_REL = "cache/font-generator";
     private static final @NotNull String FONTS_DIR_REL = "cache/fonts";
     private static final @NotNull String MODULE_NAME = "minecraft_fontgen";
@@ -73,7 +76,45 @@ public final class ToolingFonts {
 
         System.out.println();
         System.out.println("Fonts generated at " + fontsDir);
-        System.out.println("Run ./gradlew :asset-renderer:processResources to copy them onto the classpath.");
+        System.out.println("Run ./gradlew :minecraft-text:processResources to copy them onto the classpath.");
+    }
+
+    /**
+     * Generates the 6 Minecraft {@code .otf} files for {@code version} under {@code cacheRoot},
+     * cloning the generator repo and building a Python venv inside {@code cacheRoot} if they do
+     * not already exist. Returns the directory containing the produced fonts.
+     *
+     * <p>Layout produced under {@code cacheRoot}:
+     * <ul>
+     * <li>{@code font-generator/} - git clone plus {@code .venv/}</li>
+     * <li>{@code fonts/<version>/} - the 6 {@code .otf} files (returned path)</li>
+     * </ul>
+     *
+     * <p>Idempotent within a single JVM: clone and venv are skipped when already present, pip
+     * install and the generator invocation always run to pick up upstream changes. NOT safe to
+     * call concurrently across JVMs on the same {@code cacheRoot} - two racing builds could
+     * corrupt the clone or venv.
+     *
+     * @param version the Minecraft version id to generate (e.g. {@code "26.1"})
+     * @param cacheRoot the cache directory; created along with any missing parents
+     * @return the directory containing the produced {@code .otf} files
+     * @throws IOException if git / venv / pip / the generator fails, or any file I/O in the cache directory errors out
+     * @throws InterruptedException if a child process is interrupted while waiting
+     */
+    public static @NotNull Path generate(@NotNull String version, @NotNull Path cacheRoot)
+        throws IOException, InterruptedException {
+        Path absRoot = cacheRoot.toAbsolutePath().normalize();
+        Files.createDirectories(absRoot);
+
+        Path cloneDir = absRoot.resolve("font-generator");
+        Path fontsDir = absRoot.resolve("fonts").resolve(version);
+
+        ensureRepoCloned(absRoot, cloneDir);
+        Path venvPython = ensureVenv(cloneDir);
+        installPackage(cloneDir, venvPython);
+        runGenerator(cloneDir, venvPython, version, fontsDir);
+
+        return fontsDir;
     }
 
     /**

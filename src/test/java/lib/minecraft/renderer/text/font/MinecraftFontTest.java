@@ -4,7 +4,12 @@ import lib.minecraft.text.font.MinecraftFont;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 
 /**
@@ -89,6 +94,14 @@ class MinecraftFontTest {
     void styleOfUnknownFallsBackToRegular() {
         assertThat(MinecraftFont.Style.of(99), equalTo(MinecraftFont.Style.REGULAR));
         assertThat(MinecraftFont.Style.of(-1), equalTo(MinecraftFont.Style.REGULAR));
+    }
+
+    @Test
+    @DisplayName("getPath() returns a real file ending in the expected .otf name")
+    void pathIsSet() {
+        assertThat(MinecraftFont.REGULAR.getPath(), notNullValue());
+        assertThat(Files.isRegularFile(MinecraftFont.REGULAR.getPath()), is(true));
+        assertThat(MinecraftFont.REGULAR.getPath().toString(), endsWith("Minecraft-Regular.otf"));
     }
 
 }
