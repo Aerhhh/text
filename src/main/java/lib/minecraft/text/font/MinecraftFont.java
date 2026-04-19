@@ -4,7 +4,6 @@ import dev.simplified.collection.Concurrent;
 import dev.simplified.collection.ConcurrentMap;
 import dev.simplified.image.pixel.PixelBuffer;
 import dev.simplified.util.SystemUtil;
-import lib.minecraft.text.exception.FontException;
 import lombok.Cleanup;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -155,7 +154,7 @@ public enum MinecraftFont {
         return new GlyphData(PixelBuffer.wrap(glyphImage), advanceWidth, bearingX, bearingY);
     }
 
-    private static @NotNull java.awt.Font initFont(@NotNull String resourcePath) throws FontException {
+    private static @NotNull java.awt.Font initFont(@NotNull String resourcePath) {
         try {
             @Cleanup InputStream inputStream = SystemUtil.getResource(resourcePath);
             Font font = Font.createFont(
@@ -166,7 +165,7 @@ public enum MinecraftFont {
             GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
             return font;
         } catch (IOException | FontFormatException | NullPointerException ex) {
-            throw new FontException(ex, resourcePath);
+            throw new IllegalStateException(String.format("Unable to load font from file '%s'", resourcePath), ex);
         }
     }
 
