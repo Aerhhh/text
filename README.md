@@ -121,17 +121,20 @@ import dev.simplified.image.pixel.PixelBuffer;
 import lib.minecraft.text.font.MinecraftFont;
 import lib.minecraft.text.font.MinecraftGraphics;
 
-PixelBuffer buffer = PixelBuffer.of(256, 32);      // output size in render pixels
+// Output buffer is sized in native render pixels (mcPixels * MC_PIXEL_SCALE).
+PixelBuffer buffer = PixelBuffer.create(256, 32);
 MinecraftGraphics gfx = new MinecraftGraphics(buffer);
 
-int cursorX = 0;                                    // mcPixel coordinates
-int baselineY = MinecraftFont.REGULAR.getFontMetrics().getAscent();
+// drawString takes mcPixel coordinates; the baseline convention matches AWT.
+int cursorXMcPx = 0;
+int baselineYMcPx = MinecraftFont.REGULAR.getFontMetrics().getAscentMcPixels();
 
 for (ColorSegment segment : line.getSegments()) {
     segment.getColor().ifPresent(c -> gfx.setColor(c.color()));
     gfx.setFont(MinecraftFont.of(segment.fontStyle()));
-    gfx.drawString(segment.getText(), cursorX, baselineY);
-    cursorX += gfx.getFontMetrics().stringWidth(segment.getText());
+    gfx.drawString(segment.getText(), cursorXMcPx, baselineYMcPx);
+    // Font metrics return native-pixel advances; divide back into mcPixel space.
+    cursorXMcPx += gfx.getFontMetrics().stringWidth(segment.getText()) / MinecraftFont.MC_PIXEL_SCALE;
 }
 ```
 
@@ -196,21 +199,25 @@ You can skip the first step if you are only working on code paths that do not ex
 
 ## How It Works
 
-### Segment Tree
+### Segment Model
 
-Minecraft's wire format represents chat text as a recursive tree of segments, each carrying text content plus optional colour, formatting flags, click/hover events, and a child list. The `TextSegment` family mirrors that structure:
+A Minecraft chat line is modelled as a list of styled text runs rather than a recursive tree. Three classes cover the full surface area:
 
 ```
-TextSegment
-  ├── content       (plain string or a translation key)
-  ├── color         (ChatColor.Legacy | ChatColor.Custom)
-  ├── formats       (EnumSet<ChatFormat>)
-  ├── clickEvent    (optional)
-  ├── hoverEvent    (optional)
-  └── children      (List<TextSegment>)
+ColorSegment                                # styled text run
+  ├── text         (String)
+  ├── color        (Optional<ChatColor>)
+  └── bold / italic / underlined / obfuscated / strikethrough (boolean)
+
+TextSegment extends ColorSegment            # run + interaction events
+  ├── clickEvent   (Optional<ClickEvent>)
+  └── hoverEvent   (Optional<HoverEvent>)
+
+LineSegment                                 # an ordered list of runs
+  └── segments     (ConcurrentList<ColorSegment>)
 ```
 
-`LineSegment` flattens a tree into a linear sequence of same-styled runs suitable for rendering, and `ColorSegment` carries the concrete runs that `MinecraftGraphics` draws.
+`ColorSegment.fromLegacy(String)` and `LineSegment.fromLegacy(String, char)` parse legacy section-symbol strings (`§6...§l...` or a user-chosen substitute) into the model. `TextSegment#toJson` emits the wire-format `JsonObject`; `TextSegment.fromJson` round-trips it back. `MinecraftGraphics` draws the resulting runs one at a time, picking a font variant via `ColorSegment#fontStyle`.
 
 ### Glyph Rendering
 

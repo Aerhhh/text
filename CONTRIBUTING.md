@@ -269,19 +269,18 @@ src/main/java/lib/minecraft/text/
 ### Render Pipeline
 
 ```
-TextSegment tree
-      ↓
-  flatten        (TextSegment.toLines)
-      ↓
-List<LineSegment>
-      ↓
-  colorize       (LineSegment.toColorSegments)
-      ↓
-List<ColorSegment>
-      ↓
-  render         (MinecraftGraphics)
-      ↓
- PixelBuffer
+legacy string (§6...§l...)  or  JSON text component
+      ↓                                ↓
+ColorSegment.fromLegacy            TextSegment.fromJson
+      ↓                                ↓
+              LineSegment (ConcurrentList<ColorSegment>)
+                            ↓
+              MinecraftGraphics#drawString (per ColorSegment)
+                  ├── setColor   ← ColorSegment#getColor
+                  ├── setFont    ← MinecraftFont.of(ColorSegment#fontStyle)
+                  └── drawString ← ColorSegment#getText
+                            ↓
+                       PixelBuffer
 ```
 
 If your change touches glyph rasterization (`MinecraftFont`, `MinecraftFontMetrics`), delete `cache/fonts/` and re-run the full pipeline to confirm the runtime bootstrap still produces byte-identical output to the Gradle `fonts` task.
