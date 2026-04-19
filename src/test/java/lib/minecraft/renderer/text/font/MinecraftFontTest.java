@@ -1,9 +1,9 @@
-package dev.sbs.renderer.text.font;
+package lib.minecraft.renderer.text.font;
 
+import lib.minecraft.text.font.MinecraftFont;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 

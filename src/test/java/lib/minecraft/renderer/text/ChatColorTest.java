@@ -1,5 +1,6 @@
-package dev.sbs.renderer.text;
+package lib.minecraft.renderer.text;
 
+import lib.minecraft.text.ChatColor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
