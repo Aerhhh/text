@@ -1,6 +1,7 @@
-package dev.sbs.renderer.tooling;
+package lib.minecraft.text.tooling;
 
 import dev.simplified.collection.Concurrent;
+import lib.minecraft.text.font.MinecraftFont;
 import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.NotNull;
 
@@ -11,8 +12,7 @@ import java.nio.file.Path;
 /**
  * Entry point invoked by the {@code generateFonts} Gradle JavaExec task.
  * <p>
- * Produces the Minecraft {@code .otf} font files consumed by
- * {@link dev.sbs.renderer.text.MinecraftFont MinecraftFont} by cloning the
+ * Produces the Minecraft {@code .otf} font files consumed by {@link MinecraftFont} by cloning the
  * {@code minecraft-library/font-generator} Python tool into {@code cache/font-generator/},
  * setting up a virtual environment, installing the package, and invoking the generator with
  * {@code --version} and {@code --output} arguments. The resulting {@code .otf} files land in

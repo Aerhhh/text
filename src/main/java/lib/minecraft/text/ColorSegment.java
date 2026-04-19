@@ -1,10 +1,10 @@
-package dev.sbs.renderer.text;
+package lib.minecraft.text;
 
 import com.google.gson.JsonObject;
-import dev.sbs.renderer.text.font.MinecraftFont;
 import dev.simplified.collection.Concurrent;
 import dev.simplified.collection.ConcurrentList;
 import dev.simplified.util.StringUtil;
+import lib.minecraft.text.font.MinecraftFont;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;

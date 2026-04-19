@@ -1,4 +1,4 @@
-package dev.sbs.renderer.text;
+package lib.minecraft.text;
 
 import lombok.AccessLevel;
 import lombok.Getter;

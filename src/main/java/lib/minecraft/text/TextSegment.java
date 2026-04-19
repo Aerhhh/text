@@ -1,10 +1,10 @@
-package dev.sbs.renderer.text;
+package lib.minecraft.text;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import dev.sbs.renderer.text.event.ClickEvent;
-import dev.sbs.renderer.text.event.HoverEvent;
 import dev.simplified.util.StringUtil;
+import lib.minecraft.text.event.ClickEvent;
+import lib.minecraft.text.event.HoverEvent;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;

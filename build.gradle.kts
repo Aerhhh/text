@@ -3,7 +3,7 @@ plugins {
     idea
 }
 
-group = "dev.sbs"
+group = "lib.minecraft"
 version = "0.1.0"
 
 java {

@@ -1,4 +1,4 @@
-package dev.sbs.renderer.text;
+package lib.minecraft.text;
 
 import dev.simplified.util.RegexUtil;
 import dev.simplified.util.StringUtil;

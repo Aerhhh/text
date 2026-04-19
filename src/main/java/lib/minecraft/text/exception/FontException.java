@@ -1,4 +1,4 @@
-package dev.sbs.renderer.exception;
+package lib.minecraft.text.exception;
 
 import org.jetbrains.annotations.NotNull;
 

@@ -1,4 +1,4 @@
-package dev.sbs.renderer.text.font;
+package lib.minecraft.text.font;
 
 import dev.simplified.image.pixel.BlendMode;
 import dev.simplified.image.pixel.ColorMath;
@@ -114,7 +114,7 @@ public class MinecraftGraphics extends PixelGraphics {
      * {@code deriveFont(style)} (never, for us). Going through {@link #setFont(Font)} would
      * therefore always resolve to {@link MinecraftFont#REGULAR}. Callers that already know
      * which variant they want (e.g. the text pipeline picking BOLD from a
-     * {@link dev.sbs.renderer.text.ColorSegment}'s {@code &l} flag) should use this method
+     * {@link lib.minecraft.text.ColorSegment}'s {@code &l} flag) should use this method
      * instead.
      *
      * @param font the Minecraft font variant to use for subsequent {@link #drawString} calls

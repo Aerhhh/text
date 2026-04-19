@@ -1,10 +1,10 @@
-package dev.sbs.renderer.text.font;
+package lib.minecraft.text.font;
 
-import dev.sbs.renderer.exception.FontException;
 import dev.simplified.collection.Concurrent;
 import dev.simplified.collection.ConcurrentMap;
 import dev.simplified.image.pixel.PixelBuffer;
 import dev.simplified.util.SystemUtil;
+import lib.minecraft.text.exception.FontException;
 import lombok.Cleanup;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,4 @@
-package dev.sbs.renderer.text;
+package lib.minecraft.text;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
