@@ -36,7 +36,7 @@ dependencies {
     // Simplified Libraries (github.com/simplified-dev). Pinned to the post-interface-migration
     // commit on collections (ece3042 onward) - older pins linked against the AtomicCollection
     // class form and surfaced LambdaConversionException at consumer link time.
-    api("com.github.simplified-dev:collections") { version { strictly("98bf665") } }
+    api("com.github.simplified-dev:collections") { version { strictly("76ef254") } }
     api("com.github.simplified-dev:utils") { version { strictly("70529fc") } }
     api("com.github.simplified-dev:image") { version { strictly("31d5c38") } }
 
