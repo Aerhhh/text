@@ -33,10 +33,12 @@ dependencies {
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.junit.platform.launcher)
 
-    // Simplified Libraries (github.com/simplified-dev)
-    api("com.github.simplified-dev:collections") { version { strictly("c399e1dad3") } }
-    api("com.github.simplified-dev:utils") { version { strictly("36b2a338ce") } }
-    api("com.github.simplified-dev:image") { version { strictly("ba0785c409") } }
+    // Simplified Libraries (github.com/simplified-dev). Pinned to the post-interface-migration
+    // commit on collections (ece3042 onward) - older pins linked against the AtomicCollection
+    // class form and surfaced LambdaConversionException at consumer link time.
+    api("com.github.simplified-dev:collections") { version { strictly("afa6fb1") } }
+    api("com.github.simplified-dev:utils") { version { strictly("70529fc") } }
+    api("com.github.simplified-dev:image") { version { strictly("31d5c38") } }
 
     // Gson - JsonObject / JsonElement used by TextSegment + friends
     api(libs.gson)
