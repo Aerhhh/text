@@ -36,9 +36,9 @@ dependencies {
     // Simplified Libraries (github.com/simplified-dev). Pinned to the post-interface-migration
     // commit on collections (ece3042 onward) - older pins linked against the AtomicCollection
     // class form and surfaced LambdaConversionException at consumer link time.
-    api("com.github.simplified-dev:collections") { version { strictly("76ef254") } }
-    api("com.github.simplified-dev:utils") { version { strictly("70529fc") } }
-    api("com.github.simplified-dev:image") { version { strictly("31d5c38") } }
+    api("com.github.simplified-dev:collections") { version { strictly("c2d6b6c") } }
+    api("com.github.simplified-dev:utils") { version { strictly("3f20b02") } }
+    api("com.github.simplified-dev:image") { version { strictly("bec9b70") } }
 
     // Gson - JsonObject / JsonElement used by TextSegment + friends
     api(libs.gson)
