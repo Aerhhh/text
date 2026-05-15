@@ -27,11 +27,15 @@ public final class MinecraftFontMetrics extends FontMetrics {
     @Getter(AccessLevel.NONE)
     private final @NotNull MinecraftFont mcFont;
 
-    /** The AWT {@link FontMetrics} captured at init - reused by glyph rasterization. */
+    /**
+     * The AWT {@link FontMetrics} captured at init - reused by glyph rasterization.
+     */
     @Getter(AccessLevel.PACKAGE)
     private final @NotNull FontMetrics awtMetrics;
 
-    /** The AWT {@link FontRenderContext} captured at init - reused by glyph rasterization. */
+    /**
+     * The AWT {@link FontRenderContext} captured at init - reused by glyph rasterization.
+     */
     @Getter(AccessLevel.PACKAGE)
     private final @NotNull FontRenderContext awtFrc;
 

@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 
-import java.awt.*;
+import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphVector;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
@@ -57,10 +57,14 @@ public enum MinecraftFont {
      */
     public static final float FONT_POINT_SIZE = 16.0f;
 
-    /** First printable ASCII codepoint the font eagerly pre-caches at enum init. */
+    /**
+     * First printable ASCII codepoint the font eagerly pre-caches at enum init.
+     */
     private static final int EAGER_ASCII_START = 32;
 
-    /** Last printable ASCII codepoint eagerly pre-cached. */
+    /**
+     * Last printable ASCII codepoint eagerly pre-cached.
+     */
     private static final int EAGER_ASCII_END = 126;
 
     /**
@@ -80,7 +84,9 @@ public enum MinecraftFont {
      */
     public static final @NotNull String DEFAULT_VERSION = ToolingFonts.DEFAULT_VERSION;
 
-    /** The underlying AWT font, retained for lazy glyph rasterization. */
+    /**
+     * The underlying AWT font, retained for lazy glyph rasterization.
+     */
     private final @NotNull java.awt.Font actual;
 
     /**
@@ -90,13 +96,19 @@ public enum MinecraftFont {
      */
     private final @NotNull Path path;
 
-    /** The style category this enum value belongs to. */
+    /**
+     * The style category this enum value belongs to.
+     */
     private final @NotNull Style style;
 
-    /** Font-level metrics backed by the glyph atlas, captured at init time. */
+    /**
+     * Font-level metrics backed by the glyph atlas, captured at init time.
+     */
     private final @NotNull MinecraftFontMetrics fontMetrics;
 
-    /** Lazily populated glyph cache - eagerly filled with ASCII at init, rest on demand. */
+    /**
+     * Lazily populated glyph cache - eagerly filled with ASCII at init, rest on demand.
+     */
     private final @NotNull ConcurrentMap<Integer, GlyphData> glyphCache;
 
     MinecraftFont(@NotNull String fileName, @NotNull Style style) {
@@ -141,7 +153,7 @@ public enum MinecraftFont {
 
     /**
      * Rasterizes a single glyph as white-on-transparent into a {@link PixelBuffer}. Queries the
-     * AWT {@link FontMetrics} and {@link java.awt.font.FontRenderContext} already captured on
+     * AWT {@link FontMetrics} and {@link FontRenderContext} already captured on
      * {@link #fontMetrics} rather than spinning up a throwaway scratch {@link Graphics2D} for
      * every codepoint - only the per-glyph {@link BufferedImage} (sized to the visual bounds)
      * is newly allocated.
@@ -247,7 +259,9 @@ public enum MinecraftFont {
         static final @NotNull Path CACHE_ROOT = computeDefaultCacheRoot();
     }
 
-    /** Reads an {@code .otf} file from disk, registers it with AWT, and derives to the native load size. */
+    /**
+     * Reads an {@code .otf} file from disk, registers it with AWT, and derives to the native load size.
+     */
     private static @NotNull java.awt.Font createFontFromPath(@NotNull Path otfPath) {
         try (InputStream in = Files.newInputStream(otfPath)) {
             Font font = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(FONT_POINT_SIZE);
@@ -284,7 +298,9 @@ public enum MinecraftFont {
 
     // --- inner types ---
 
-    /** Internal result of {@link #resolveFont}: the loaded AWT font plus the on-disk path of its {@code .otf}. */
+    /**
+     * Internal result of {@link #resolveFont}: the loaded AWT font plus the on-disk path of its {@code .otf}.
+     */
     private record Resolved(@NotNull java.awt.Font font, @NotNull Path path) {}
 
     /**

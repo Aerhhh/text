@@ -58,7 +58,7 @@ public final class LineSegment {
      *
      * @param legacyText The text to make into an object
      * @param symbolSubstitute The character substitute
-     * @return A collection of LineSegments representing the legacy text.
+     * @return A collection of LineSegments representing the legacy text
      */
     public static @NotNull ConcurrentList<LineSegment> fromLegacy(@NotNull String legacyText, char symbolSubstitute) {
         return StreamUtil.ofArrays(legacyText.split("(\r?\n|\\\\n)", -1))

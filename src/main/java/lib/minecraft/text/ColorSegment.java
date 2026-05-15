@@ -67,7 +67,7 @@ public class ColorSegment {
      *
      * @param legacyText The text to make into an object
      * @param symbolSubstitute The character substitute
-     * @return A LineSegment representing the legacy text.
+     * @return A LineSegment representing the legacy text
      */
     public static @NotNull LineSegment fromLegacy(@NotNull String legacyText, char symbolSubstitute) {
         return fromLegacyHandler(legacyText, symbolSubstitute, () -> new ColorSegment(""));

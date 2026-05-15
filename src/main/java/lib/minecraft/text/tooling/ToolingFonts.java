@@ -48,7 +48,9 @@ public final class ToolingFonts {
 
     private static final @NotNull String REPO_URL = "https://github.com/minecraft-library/font-generator.git";
 
-    /** Default Minecraft version generated when {@link #main} is invoked without an argument and the version used by {@link lib.minecraft.text.font.MinecraftFont}'s runtime bootstrap. */
+    /**
+     * Default Minecraft version generated when {@link #main} is invoked without an argument and the version used by {@link lib.minecraft.text.font.MinecraftFont}'s runtime bootstrap.
+     */
     public static final @NotNull String DEFAULT_VERSION = "26.1";
 
     private static final @NotNull String CLONE_DIR_REL = "cache/font-generator";
