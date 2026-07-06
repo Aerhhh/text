@@ -37,7 +37,7 @@ dependencies {
     // commit on collections (ece3042 onward) - older pins linked against the AtomicCollection
     // class form and surfaced LambdaConversionException at consumer link time.
     api("com.github.simplified-dev:collections") { version { strictly("6586657") } }
-    api("com.github.simplified-dev:utils") { version { strictly("5c6c96a") } }
+    api("com.github.simplified-dev:utils") { version { strictly("37dc4a8") } }
     api("com.github.simplified-dev:image") { version { strictly("4140130") } }
 
     // Gson - JsonObject / JsonElement used by TextSegment + friends
