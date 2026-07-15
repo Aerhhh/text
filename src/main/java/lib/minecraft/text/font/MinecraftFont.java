@@ -84,6 +84,19 @@ public enum MinecraftFont {
     public static final int MC_PIXEL_SCALE = 2;
 
     /**
+     * Horizontal shear of the italic OTFs, as {@code dx} per {@code +1} unit above the baseline.
+     * <p>
+     * The italic slant is baked into {@code Minecraft-Italic.otf} / {@code Minecraft-BoldItalic.otf}
+     * at generation time - there is no runtime glyph matrix to intercept. This constant mirrors the
+     * font-generator's {@code ITALIC_SHEAR_FACTOR = 1 / ITALIC_SHEAR_VERTICAL} (with
+     * {@code ITALIC_SHEAR_VERTICAL = 5}), which each glyph contour is sheared by as
+     * {@code (sx + sy * factor, sy)}. Because the shear is scale-uniform it is the same slope in
+     * output px, so a renderer that wants a gradient's color bands to run parallel to italic
+     * letterforms slants them by this factor. It does not affect glyph drawing.
+     */
+    public static final float ITALIC_SHEAR = 1.0f / 5.0f;
+
+    /**
      * Minecraft version used by the runtime font bootstrap when the classpath has no {@code fonts/}
      * resources. Mirrors {@link ToolingFonts#DEFAULT_VERSION} so the in-module Gradle task and the
      * runtime cache produce byte-identical output.

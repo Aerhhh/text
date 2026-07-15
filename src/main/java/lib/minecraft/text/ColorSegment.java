@@ -22,6 +22,7 @@ public class ColorSegment {
 
     protected @NotNull String text;
     protected @NotNull Optional<ChatColor> color = Optional.empty();
+    protected @NotNull Optional<GradientSpec> gradient = Optional.empty();
     protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
     public ColorSegment(@NotNull String text) {
@@ -45,6 +46,7 @@ public class ColorSegment {
         return builder()
             .withText(colorSegment.getText())
             .withColor(colorSegment.getColor())
+            .withGradient(colorSegment.getGradient())
             .isItalic(colorSegment.isItalic())
             .isBold(colorSegment.isBold())
             .isUnderlined(colorSegment.isUnderlined())
@@ -158,6 +160,22 @@ public class ColorSegment {
         this.color = color;
     }
 
+    /**
+     * Sets the optional gradient fill. When present it overrides {@link #getColor() color} for the
+     * glyph fill, shadow, and decorations at render time; {@code color} stays the single-value
+     * fallback for consumers that cannot render a gradient (including {@link #toLegacy()}, which has
+     * no gradient representation and is lossy).
+     *
+     * @param gradient the gradient spec, or {@code null} to clear it
+     */
+    public void setGradient(@Nullable GradientSpec gradient) {
+        this.gradient = Optional.ofNullable(gradient);
+    }
+
+    public void setGradient(@NotNull Optional<GradientSpec> gradient) {
+        this.gradient = gradient;
+    }
+
     public void setText(@NotNull String value) {
         this.text = StringUtil.defaultIfEmpty(value, "")
             .replaceAll("(?<!\\\\)'", "’") // Handle Unescaped Windows Apostrophe
@@ -168,6 +186,7 @@ public class ColorSegment {
         JsonObject object = new JsonObject();
         object.addProperty("text", this.getText());
         this.getColor().ifPresent(color -> object.addProperty("color", color.toJsonString()));
+        this.getGradient().ifPresent(gradient -> object.add("gradient", gradient.toJson()));
         if (this.isItalic()) object.addProperty("italic", true);
         if (this.isBold()) object.addProperty("bold", true);
         if (this.isUnderlined()) object.addProperty("underlined", true);
@@ -223,6 +242,7 @@ public class ColorSegment {
 
         protected String text = "";
         protected Optional<ChatColor> color = Optional.empty();
+        protected Optional<GradientSpec> gradient = Optional.empty();
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
 
         public Builder isBold() {
@@ -279,6 +299,15 @@ public class ColorSegment {
             return this;
         }
 
+        public Builder withGradient(@Nullable GradientSpec gradient) {
+            return this.withGradient(Optional.ofNullable(gradient));
+        }
+
+        public Builder withGradient(@NotNull Optional<GradientSpec> gradient) {
+            this.gradient = gradient;
+            return this;
+        }
+
         public Builder withText(@Nullable String text) {
             return this.withText(Optional.ofNullable(text));
         }
@@ -291,6 +320,7 @@ public class ColorSegment {
         public @NotNull ColorSegment build() {
             ColorSegment colorSegment = new ColorSegment(this.text);
             colorSegment.setColor(this.color);
+            colorSegment.setGradient(this.gradient);
             colorSegment.setObfuscated(this.obfuscated);
             colorSegment.setItalic(this.italic);
             colorSegment.setBold(this.bold);

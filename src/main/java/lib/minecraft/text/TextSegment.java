@@ -43,6 +43,7 @@ public final class TextSegment extends ColorSegment {
             if (jsonObject.has("clickEvent")) textSegment.setClickEvent(Optional.of(ClickEvent.fromJson(jsonObject.get("clickEvent").getAsJsonObject())));
             if (jsonObject.has("hoverEvent")) textSegment.setHoverEvent(Optional.of(HoverEvent.fromJson(jsonObject.get("hoverEvent").getAsJsonObject())));
             if (jsonObject.has("color")) textSegment.setColor(ChatColor.fromJsonString(jsonObject.get("color").getAsString()));
+            if (jsonObject.has("gradient")) textSegment.setGradient(GradientSpec.fromJson(jsonObject.get("gradient").getAsJsonObject()));
             if (jsonObject.has("obfuscated")) textSegment.setObfuscated(jsonObject.get("obfuscated").getAsBoolean());
             if (jsonObject.has("italic")) textSegment.setItalic(jsonObject.get("italic").getAsBoolean());
             if (jsonObject.has("bold")) textSegment.setBold(jsonObject.get("bold").getAsBoolean());
@@ -77,6 +78,7 @@ public final class TextSegment extends ColorSegment {
 
         protected String text = "";
         protected Optional<ChatColor> color = Optional.empty();
+        protected Optional<GradientSpec> gradient = Optional.empty();
         protected boolean italic, bold, underlined, obfuscated, strikethrough;
         private Optional<ClickEvent> clickEvent = Optional.empty();
         private Optional<HoverEvent> hoverEvent = Optional.empty();
@@ -135,6 +137,15 @@ public final class TextSegment extends ColorSegment {
             return this;
         }
 
+        public Builder withGradient(@Nullable GradientSpec gradient) {
+            return this.withGradient(Optional.ofNullable(gradient));
+        }
+
+        public Builder withGradient(@NotNull Optional<GradientSpec> gradient) {
+            this.gradient = gradient;
+            return this;
+        }
+
         public Builder withClickEvent(@Nullable ClickEvent clickEvent) {
             return this.withClickEvent(Optional.ofNullable(clickEvent));
         }
@@ -167,6 +178,7 @@ public final class TextSegment extends ColorSegment {
             textSegment.setClickEvent(this.clickEvent);
             textSegment.setHoverEvent(hoverEvent);
             textSegment.setColor(this.color);
+            textSegment.setGradient(this.gradient);
             textSegment.setObfuscated(this.obfuscated);
             textSegment.setItalic(this.italic);
             textSegment.setBold(this.bold);
