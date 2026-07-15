@@ -31,7 +31,8 @@ import java.util.Objects;
  *
  * @param mode the interpolation mode
  * @param stops the color stops - per-mode meaning, empty for {@link Mode#RAINBOW}
- * @param hueCycles {@link Mode#RAINBOW} hue revolutions across the segment; ignored by other modes
+ * @param hueCycles {@link Mode#RAINBOW} hue revolutions across the segment; normalized to {@code 1}
+ *     for every other mode (ignored there)
  * @param bandPx quantization band width in output px, {@link #PER_LETTER} = per-letter
  * @param shear band slant as dx per +1 py above baseline, {@link #AUTO_SHEAR} = match segment italic
  * @param scroll the scroll animation, or {@code null} for a static gradient
@@ -64,6 +65,10 @@ public record GradientSpec(
             throw new IllegalArgumentException("bandPx must be >= 0, got " + bandPx);
 
         stops = normalizeStops(mode, stops, hueCycles);
+        // hueCycles is meaningful only for RAINBOW; canonicalize it to the default for every other
+        // mode so equal-in-effect specs compare equal and survive the JSON round-trip (toJson emits
+        // hue_cycles for RAINBOW only).
+        if (mode != Mode.RAINBOW) hueCycles = 1f;
     }
 
     /**

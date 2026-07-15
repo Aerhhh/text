@@ -185,6 +185,15 @@ class GradientSpecTest {
         }
 
         @Test
+        @DisplayName("non-RAINBOW hueCycles is canonicalized to 1 so the round-trip preserves identity")
+        void nonRainbowHueCyclesCanonicalized() {
+            GradientSpec spec = GradientSpec.builder(GradientSpec.Mode.START_END)
+                .addStop(0xFF0000).addStop(0x0000FF).hueCycles(3f).build();
+            assertThat(spec.hueCycles(), is(1f)); // canonicalized (ignored for non-RAINBOW)
+            assertThat(GradientSpec.fromJson(spec.toJson()), is(spec));
+        }
+
+        @Test
         @DisplayName("unknown mode and malformed color fail parse loudly")
         void malformedFailsLoudly() {
             JsonObject unknownMode = new JsonObject();
