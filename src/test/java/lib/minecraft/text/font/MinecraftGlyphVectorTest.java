@@ -10,6 +10,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphVector;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
+import java.io.StringReader;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
@@ -65,6 +66,42 @@ class MinecraftGlyphVectorTest {
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++)
                 assertThat("pixel (" + x + "," + y + ")", target.getPixel(x, y), is(source.getRGB(x, y)));
+    }
+
+    @Test
+    @DisplayName("a non-zero sidecar origin offsets the raster blit on both axes independently")
+    void rasterGlyphOriginOffsetsBlitPosition() {
+        // The committed fixture uses origin [0,0] everywhere, so the sidecar-origin -> bearing ->
+        // blit-offset flow is otherwise unexercised: an axis swap or a sign flip would pass every
+        // other test. This pins it. origin [128, 192] font units = (2, 3) output px (128 units per
+        // mcPixel, MC_PIXEL_SCALE = 2), and 2 != 3 so a swapped axis lands on a background pixel.
+        ColorGlyphSidecar sidecar = ColorGlyphSidecar.parse(new StringReader("""
+            {
+              "schema_version": 1, "units_per_em": 1024, "graphic_type": "png ",
+              "fonts": [{"font_id": "synth:demo", "file": "SynthColour-demo.ttf"}],
+              "glyphs": [
+                {"font_id": "synth:demo", "codepoint": 57345, "gid": 1,
+                 "advance": 1024, "origin": [128, 192], "strike_ppem": 8}
+              ]
+            }
+            """));
+        MinecraftColorFont font = MinecraftColorFont.of(ColorFontFixtures.DEMO,
+            SbixStrikeCache.of(ColorFontFixtures.bytes("SynthColour-demo.ttf")), sidecar, MinecraftFont.REGULAR);
+
+        MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
+        MinecraftGlyphVector.PositionedGlyph glyph = vector.positionedGlyph(0);
+        assertThat(glyph.originX(), is(2));
+        assertThat(glyph.originY(), is(3));
+
+        PixelBuffer target = PixelBuffer.create(16, 16);
+        target.fill(0);
+        MinecraftGraphics graphics = new MinecraftGraphics(target);
+        vector.paint(graphics, 0, 0, Color.WHITE);
+
+        // The strike's opaque top-left pixel lands at (originX, originY).
+        assertThat("origin offset applied", target.getPixel(2, 3), is(0xFFDC2828));
+        assertThat("nothing at the un-offset origin", target.getPixel(0, 0), is(0));
+        assertThat("a swapped axis would paint here", target.getPixel(3, 2), is(0));
     }
 
     @Test
