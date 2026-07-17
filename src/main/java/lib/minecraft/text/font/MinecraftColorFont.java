@@ -5,8 +5,10 @@ import dev.simplified.collection.ConcurrentMap;
 import dev.simplified.image.pixel.PixelBuffer;
 import org.jetbrains.annotations.NotNull;
 
+import javax.imageio.ImageIO;
 import java.awt.Shape;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -21,12 +23,18 @@ import java.util.Optional;
  * A single pack colour font, keyed by {@link FontId}, that sits beside the fixed
  * {@link MinecraftFont.Vanilla} enum as the second {@link MinecraftFont} implementation.
  * <p>
- * It binds the three things a colour font needs at draw time: an {@code sbix} strike cache over its
- * per-font {@code .ttf}, the parsed {@link ColorGlyphSidecar} view (advances, origins, strike
- * selection), and a vanilla {@link MinecraftFont} mono fallback for any codepoint the pack does not
- * define. Every codepoint resolves through {@link #glyph(int)} into a single {@link GlyphData}, so
- * downstream layout ({@link #layout(String)}), measurement ({@link #metrics()}), and painting share
- * one advance source and one glyph surface with the vanilla path.
+ * It binds the three things a colour font needs at draw time: a private {@code sbix} strike cache
+ * over its per-font {@code .ttf} (an {@link SbixReader} plus a decode-once
+ * {@code (gid, ppem) -> PixelBuffer} map), the parsed {@link ColorGlyphSidecar} view (advances,
+ * origins, strike selection), and a vanilla {@link MinecraftFont} mono fallback for any codepoint
+ * the pack does not define. Every codepoint resolves through {@link #glyph(int)} into a single
+ * {@link GlyphData}, so downstream layout ({@link #layout(String)}), measurement ({@link #metrics()}),
+ * and painting share one advance source and one glyph surface with the vanilla path.
+ * <p>
+ * Strikes are cached as {@link PixelBuffer} rather than {@link BufferedImage}: each strike is decoded
+ * once via {@link ImageIO#read}, wrapped into an ARGB {@code int[]}, and the whole
+ * {@code BufferedImage}/{@code Raster}/{@code ColorModel}/{@code SampleModel} object graph is then
+ * discarded, shedding its fixed per-strike overhead for the process lifetime of the font.
  */
 public final class MinecraftColorFont implements MinecraftFont {
 
@@ -41,7 +49,7 @@ public final class MinecraftColorFont implements MinecraftFont {
     public static final @NotNull String SIDECAR_NAME = "colour-glyphs.json";
 
     private final @NotNull FontId fontId;
-    private final @NotNull SbixStrikeCache strikes;
+    private final @NotNull SbixReader reader;
     private final @NotNull ColorGlyphSidecar sidecar;
     private final @NotNull MinecraftFont monoFallback;
     private final @NotNull MinecraftFontMetrics metrics;
@@ -52,17 +60,26 @@ public final class MinecraftColorFont implements MinecraftFont {
      */
     private final @NotNull ConcurrentMap<Integer, GlyphData> glyphCache;
 
+    /**
+     * Decode-once {@code sbix} strike cache keyed {@code (gid << 16 | ppem)}. Each strike is decoded
+     * exactly once into a {@link PixelBuffer}; an empty glyph or non-PNG record caches an empty
+     * result so the miss is not re-attempted. Unbounded and process-lifetime - the glyph set per pack
+     * is finite - and it garbage-collects with the font.
+     */
+    private final @NotNull ConcurrentMap<Long, Optional<PixelBuffer>> strikeCache;
+
     private MinecraftColorFont(
         @NotNull FontId fontId,
-        @NotNull SbixStrikeCache strikes,
+        @NotNull SbixReader reader,
         @NotNull ColorGlyphSidecar sidecar,
         @NotNull MinecraftFont monoFallback
     ) {
         this.fontId = fontId;
-        this.strikes = strikes;
+        this.reader = reader;
         this.sidecar = sidecar;
         this.monoFallback = monoFallback;
         this.glyphCache = Concurrent.newMap();
+        this.strikeCache = Concurrent.newMap();
 
         MinecraftFontMetrics mono = monoFallback.metrics();
         this.metrics = MinecraftFontMetrics.of(this, mono.getFont(), mono.getAscent(), mono.getDescent(), mono.getHeight());
@@ -84,7 +101,7 @@ public final class MinecraftColorFont implements MinecraftFont {
         @NotNull ColorGlyphSidecar sidecar,
         @NotNull MinecraftFont monoFallback
     ) {
-        return new MinecraftColorFont(fontId, SbixStrikeCache.of(ttf), sidecar, monoFallback);
+        return new MinecraftColorFont(fontId, new SbixReader(ttf), sidecar, monoFallback);
     }
 
     /**
@@ -193,20 +210,35 @@ public final class MinecraftColorFont implements MinecraftFont {
     private int resolvePpem(@NotNull GlyphRow row) {
         Integer declared = row.strikePpem();
         if (declared != null) return declared;
-        int[] available = this.strikes.reader().strikePpems();
+        int[] available = this.reader.strikePpems();
         return available.length > 0 ? available[0] : 0;
     }
 
     /**
-     * Returns the decoded {@code sbix} strike for a glyph as a {@link PixelBuffer}, or empty when the
-     * glyph is absent in that strike or its graphic type is not a PNG.
+     * Returns the decoded {@code sbix} strike for a glyph as a {@link PixelBuffer}, decoding at most
+     * once per {@code (gid, ppem)} and caching the result. Empty when the glyph is absent in that
+     * strike or its graphic type is not a PNG.
      *
      * @param gid the glyph id
      * @param ppem the strike ppem
      * @return the decoded strike, or empty
      */
     @NotNull Optional<PixelBuffer> strike(int gid, int ppem) {
-        return this.strikes.strike(gid, ppem).map(image -> PixelBuffer.wrap(toArgb(image)));
+        long key = ((long) gid << 16) | (ppem & 0xFFFFL);
+        return this.strikeCache.computeIfAbsent(key, ignored -> decode(gid, ppem));
+    }
+
+    private @NotNull Optional<PixelBuffer> decode(int gid, int ppem) {
+        byte[] png = this.reader.strikePng(gid, ppem);
+        if (png == null) return Optional.empty();
+        try (InputStream in = new ByteArrayInputStream(png)) {
+            BufferedImage image = ImageIO.read(in);
+            if (image == null) return Optional.empty();
+            // Wrap into an ARGB int[] and drop the BufferedImage graph; the PixelBuffer is all we keep.
+            return Optional.of(PixelBuffer.wrap(toArgb(image)));
+        } catch (IOException ex) {
+            throw new UncheckedIOException("Unable to decode sbix strike gid=" + gid + " ppem=" + ppem, ex);
+        }
     }
 
     @Override
@@ -228,7 +260,7 @@ public final class MinecraftColorFont implements MinecraftFont {
      * @return the underlying {@code sbix} reader
      */
     @NotNull SbixReader reader() {
-        return this.strikes.reader();
+        return this.reader;
     }
 
     /**

@@ -13,8 +13,8 @@ import java.util.Map;
  * {@code GlyphVector} advances), so a consumer that wants the artwork must extract the strike PNGs
  * itself. This reader does exactly that with nothing beyond {@code java.nio}-style byte access: it
  * walks the sfnt table directory, reads {@code maxp.numGlyphs}, locates {@code sbix}, and for any
- * {@code (gid, ppem)} returns the raw PNG payload byte-for-byte. Decoding is left to
- * {@link SbixStrikeCache} so this class stays dependency-free.
+ * {@code (gid, ppem)} returns the raw PNG payload byte-for-byte. Decoding and caching are left to
+ * {@link MinecraftColorFont}'s internal strike cache so this class stays dependency-free.
  * <p>
  * The per-glyph offset array of each strike has {@code numGlyphs + 1} entries covering every glyph
  * in glyph order; an empty glyph has {@code offset[gid + 1] == offset[gid]}. A {@code dupe} record

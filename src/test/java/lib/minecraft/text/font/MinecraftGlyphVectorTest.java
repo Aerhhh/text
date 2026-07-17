@@ -231,4 +231,58 @@ class MinecraftGlyphVectorTest {
         assertThat(painted, greaterThan(0));
     }
 
+    @Test
+    @DisplayName("drawString renders byte-identically to an explicit layout + paint for vanilla text")
+    void drawStringEqualsLayoutPaint() {
+        String text = "Hello, World!";
+
+        PixelBuffer viaDrawString = PixelBuffer.create(160, 32);
+        viaDrawString.fill(0);
+        MinecraftGraphics g1 = new MinecraftGraphics(viaDrawString);
+        g1.setColor(Color.WHITE);
+        g1.drawString(text, 2, 20);
+
+        PixelBuffer viaLayoutPaint = PixelBuffer.create(160, 32);
+        viaLayoutPaint.fill(0);
+        MinecraftGraphics g2 = new MinecraftGraphics(viaLayoutPaint);
+        MinecraftFont.Vanilla.REGULAR.layout(text).paint(g2, 2, 20, Color.WHITE);
+
+        int painted = 0;
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 160; x++) {
+                assertThat("pixel (" + x + "," + y + ")", viaDrawString.getPixel(x, y), is(viaLayoutPaint.getPixel(x, y)));
+                if ((viaDrawString.getPixel(x, y) >>> 24) != 0) painted++;
+            }
+        assertThat("the run actually painted glyphs", painted, greaterThan(0));
+    }
+
+    @Test
+    @DisplayName("a mixed mono + colour + space run paints through one layout call with zero caller branching")
+    void mixedRunPaintsThroughOneCall() {
+        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        String text = "A" + cp(ColorFontFixtures.CP_FRAC_SPACE) + cp(ColorFontFixtures.CP_FLAT);
+        MinecraftGlyphVector vector = font.layout(text);
+
+        // Every kind arrives through the one glyph() surface - the caller never branches on font kind.
+        assertThat(vector.positionedGlyph(0).kind(), is(MinecraftGlyphVector.Kind.MONO));    // 'A'
+        assertThat(vector.positionedGlyph(1).kind(), is(MinecraftGlyphVector.Kind.SPACE));   // fractional-advance space
+        assertThat(vector.positionedGlyph(2).kind(), is(MinecraftGlyphVector.Kind.RASTER));  // flat colour glyph
+
+        PixelBuffer target = PixelBuffer.create(96, 48);
+        target.fill(0);
+        MinecraftGraphics graphics = new MinecraftGraphics(target);
+        vector.paint(graphics, 0, 16, Color.WHITE);   // one call renders mono + colour + space together
+
+        boolean whiteMonoPixel = false;
+        boolean nativeRedRasterPixel = false;
+        for (int y = 0; y < 48 && !(whiteMonoPixel && nativeRedRasterPixel); y++)
+            for (int x = 0; x < 96; x++) {
+                int pixel = target.getPixel(x, y);
+                if (pixel == 0xFFFFFFFF) whiteMonoPixel = true;        // the mono 'A' tinted white
+                if (pixel == 0xFFDC2828) nativeRedRasterPixel = true;  // the colour glyph's untinted red
+            }
+        assertTrue(whiteMonoPixel, "expected the tinted mono glyph in the buffer");
+        assertTrue(nativeRedRasterPixel, "expected the untinted colour glyph in the buffer");
+    }
+
 }
