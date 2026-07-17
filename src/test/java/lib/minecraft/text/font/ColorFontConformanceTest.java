@@ -76,8 +76,8 @@ class ColorFontConformanceTest {
         assertThat(demo.sidecar().file().orElseThrow(), is(ColorFontFixtures.MERGED_TTF));
         assertThat(alt.sidecar().file().orElseThrow(), is(ColorFontFixtures.MERGED_TTF));
 
-        MinecraftFont.GlyphData demoGlyph = demo.glyph(ColorFontFixtures.CP_FLAT);
-        MinecraftFont.GlyphData altGlyph = alt.glyph(ColorFontFixtures.CP_FLAT);
+        MinecraftGlyph demoGlyph = demo.glyph(ColorFontFixtures.CP_FLAT);
+        MinecraftGlyph altGlyph = alt.glyph(ColorFontFixtures.CP_FLAT);
 
         // one original codepoint (E001) bridges to distinct stored codepoints -> distinct merged gids
         assertThat(demoGlyph.gid(), is(ColorFontFixtures.GID_FLAT));
@@ -93,8 +93,8 @@ class ColorFontConformanceTest {
     void dedupSharedGidResolvesSameArt() {
         MinecraftColorFont font = MinecraftColorFont.load(ColorFontFixtures.DEMO);
 
-        MinecraftFont.GlyphData flat = font.glyph(ColorFontFixtures.CP_FLAT);
-        MinecraftFont.GlyphData dup = font.glyph(ColorFontFixtures.CP_FLAT_DUP);
+        MinecraftGlyph flat = font.glyph(ColorFontFixtures.CP_FLAT);
+        MinecraftGlyph dup = font.glyph(ColorFontFixtures.CP_FLAT_DUP);
 
         // pack-wide content dedup collapsed the identical art of E001 and E003 onto one gid...
         assertThat(flat.gid(), is(ColorFontFixtures.GID_FLAT));

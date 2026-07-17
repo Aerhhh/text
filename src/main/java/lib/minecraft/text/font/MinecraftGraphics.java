@@ -62,16 +62,16 @@ public class MinecraftGraphics extends PixelGraphics {
      * Blits one glyph at buffer coordinates {@code (x, y)}, offset by the glyph's bearing.
      * <p>
      * Monochrome glyphs are tinted: each pixel's alpha is multiplied against {@code tintArgb}'s
-     * RGB (the vanilla text path). Colour glyphs ({@link MinecraftFont.GlyphData#color()}) carry
-     * their own RGBA artwork and are blitted natively - {@code tintArgb} is ignored - so pack
-     * {@code sbix} strikes keep their authored colours.
+     * RGB (the vanilla text path). Colour glyphs ({@link MinecraftGlyph#color()}) carry their own
+     * RGBA artwork and are blitted natively - {@code tintArgb} is ignored - so pack {@code sbix}
+     * strikes keep their authored colours.
      *
      * @param glyph the glyph to blit
      * @param x the buffer X of the cursor
      * @param y the buffer Y of the cursor
      * @param tintArgb the tint applied to monochrome glyphs (ignored for colour glyphs)
      */
-    void blitGlyph(@NotNull MinecraftFont.GlyphData glyph, int x, int y, int tintArgb) {
+    void blitGlyph(@NotNull MinecraftGlyph glyph, int x, int y, int tintArgb) {
         if (glyph.kind() == MinecraftGlyphVector.Kind.SPACE) return;   // advance-only sentinel, paints nothing
         PixelBuffer bitmap = glyph.bitmap();
         int bw = bitmap.width();
@@ -143,10 +143,8 @@ public class MinecraftGraphics extends PixelGraphics {
         int fillArgb = fill.getRGB();
 
         for (int i = 0; i < vector.glyphCount(); i++) {
-            MinecraftGlyphVector.PositionedGlyph positioned = vector.positionedGlyph(i);
-            MinecraftFont.GlyphData glyph = positioned.glyph();
-            if (glyph == null) continue;   // defensive: glyph() is non-null in practice (SPACE is a sentinel)
-            blitGlyph(glyph, cx + (int) Math.round(positioned.penX()), cy, fillArgb);   // blitGlyph no-ops on SPACE
+            MinecraftGlyph glyph = vector.positionedGlyph(i);
+            blitGlyph(glyph, cx + (int) Math.round(glyph.penX()), cy, fillArgb);   // blitGlyph no-ops on SPACE
         }
     }
 

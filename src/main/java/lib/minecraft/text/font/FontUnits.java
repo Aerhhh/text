@@ -14,7 +14,7 @@ public final class FontUnits {
 
     /**
      * Converts a value in font units to output (buffer) pixels - the same space
-     * {@link MinecraftFont.GlyphData#advanceWidth() mono advances} and the
+     * {@link MinecraftGlyph#advanceWidth() mono advances} and the
      * {@link MinecraftGraphics#drawString drawString cursor} live in.
      * <p>
      * The conversion is {@code units / (unitsPerEm / 8) * }{@link MinecraftFont#MC_PIXEL_SCALE}:

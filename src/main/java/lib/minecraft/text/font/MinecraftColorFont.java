@@ -29,7 +29,7 @@ import java.util.Optional;
  * over its {@code .ttf} (a {@link SbixReader} plus a decode-once {@code (gid, ppem) -> PixelBuffer}
  * map), the parsed {@link ColorGlyphSidecar} view (advances, origins, strike selection), and a
  * vanilla {@link MinecraftFont} mono fallback for any codepoint the pack does not define. Every
- * codepoint resolves through {@link #glyph(int)} into a single {@link GlyphData}, so downstream
+ * codepoint resolves through {@link #glyph(int)} into a single {@link MinecraftGlyph}, so downstream
  * layout ({@link #layout(String)}), measurement ({@link #metrics()}), and painting share one advance
  * source and one glyph surface with the vanilla path.
  * <p>
@@ -67,7 +67,7 @@ public final class MinecraftColorFont implements MinecraftFont {
      * lower {@code sbix} strike tier. Stays private per instance - unlike the {@link #strikes} store,
      * the resolved rows differ per font id.
      */
-    private final @NotNull ConcurrentMap<Integer, GlyphData> glyphCache;
+    private final @NotNull ConcurrentMap<Integer, MinecraftGlyph> glyphCache;
 
     private MinecraftColorFont(
         @NotNull FontId fontId,
@@ -183,18 +183,18 @@ public final class MinecraftColorFont implements MinecraftFont {
     }
 
     @Override
-    public @NotNull GlyphData glyph(int codepoint) {
+    public @NotNull MinecraftGlyph glyph(int codepoint) {
         return this.glyphCache.computeIfAbsent(codepoint, this::resolveGlyph);
     }
 
-    private @NotNull GlyphData resolveGlyph(int codepoint) {
+    private @NotNull MinecraftGlyph resolveGlyph(int codepoint) {
         Optional<GlyphRow> rowOptional = this.sidecar.lookup(this.fontId, codepoint);
         if (rowOptional.isEmpty()) return this.monoFallback.glyph(codepoint);   // MONO fallback
 
         GlyphRow row = rowOptional.get();
         int unitsPerEm = this.sidecar.unitsPerEm();
         float advance = (float) FontUnits.toOutputPixels(row.advance(), unitsPerEm);
-        if (row.isSpace()) return GlyphData.space(advance);
+        if (row.isSpace()) return MinecraftGlyph.space(codepoint, advance);
 
         int ppem = resolvePpem(row);
         int gid = row.gid();
@@ -204,8 +204,8 @@ public final class MinecraftColorFont implements MinecraftFont {
         // A raster row whose strike fails to decode degrades to an advance-only sentinel: the pen
         // still moves, nothing is painted, and glyph(cp) never returns null.
         return strike(gid, ppem)
-            .map(bitmap -> GlyphData.color(bitmap, advance, originX, originY, gid, ppem))
-            .orElseGet(() -> GlyphData.space(advance));
+            .map(bitmap -> MinecraftGlyph.color(codepoint, bitmap, advance, originX, originY, gid, ppem))
+            .orElseGet(() -> MinecraftGlyph.space(codepoint, advance));
     }
 
     private int resolvePpem(@NotNull GlyphRow row) {

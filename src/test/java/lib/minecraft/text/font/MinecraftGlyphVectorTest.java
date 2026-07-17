@@ -88,7 +88,7 @@ class MinecraftGlyphVectorTest {
             ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF), sidecar, MinecraftFont.Vanilla.REGULAR);
 
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
-        MinecraftGlyphVector.PositionedGlyph glyph = vector.positionedGlyph(0);
+        MinecraftGlyph glyph = vector.positionedGlyph(0);
         assertThat(glyph.originX(), is(2));
         assertThat(glyph.originY(), is(3));
 
@@ -126,9 +126,9 @@ class MinecraftGlyphVectorTest {
         MinecraftGlyphVector vector = font.layout(text);
 
         assertThat(vector.positionedGlyph(1).kind(), is(MinecraftGlyphVector.Kind.SPACE));
-        assertThat(vector.positionedGlyph(1).advance(), is(-16.0));
+        assertThat(vector.positionedGlyph(1).signedAdvance(), is(-16.0f));
         assertThat(vector.positionedGlyph(2).penX(), is(0.0));   // 16 + (-16) back to origin
-        assertThat(vector.positionedGlyph(1).glyph().kind(), is(MinecraftGlyphVector.Kind.SPACE));   // SPACE sentinel, not null
+        assertThat(vector.positionedGlyph(1).bitmap().width(), is(1));   // SPACE sentinel bitmap, never null
         assertThat(vector.advanceX(), is(16.0));
     }
 
@@ -150,10 +150,10 @@ class MinecraftGlyphVectorTest {
         MinecraftColorFont font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector vector = font.layout("A");   // 0x41 is not a pack colour glyph
 
-        MinecraftGlyphVector.PositionedGlyph glyph = vector.positionedGlyph(0);
+        MinecraftGlyph glyph = vector.positionedGlyph(0);
         assertThat(glyph.kind(), is(MinecraftGlyphVector.Kind.MONO));
-        assertThat(glyph.glyph().color(), is(false));
-        assertThat(glyph.advance(), is((double) MinecraftFont.Vanilla.REGULAR.glyph('A').advanceWidth()));
+        assertThat(glyph.color(), is(false));
+        assertThat(glyph.signedAdvance(), is((float) MinecraftFont.Vanilla.REGULAR.glyph('A').advanceWidth()));
     }
 
     @Test

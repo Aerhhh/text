@@ -1,7 +1,6 @@
 package lib.minecraft.text.font;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.awt.Color;
 import java.awt.Shape;
@@ -14,14 +13,21 @@ import java.util.Optional;
  * A laid-out run of text: its own positioning-and-painting type, deliberately NOT a
  * {@link java.awt.font.GlyphVector} subclass.
  * <p>
- * An {@code sbix} table makes Java2D zero every {@code GlyphVector} advance and paint nothing, so a
- * wrapper around the AWT type would buy only zeroed metrics and a blank raster. Instead this type
- * owns both jobs itself, and it does so uniformly for both {@link MinecraftFont} kinds: layout walks
- * codepoints, resolves each through {@link MinecraftFont#glyph(int)}, and accumulates pens from
- * {@link MinecraftFont.GlyphData#signedAdvance()}. There is no vanilla-vs-colour branch - a mono
- * atlas glyph, a colour {@code sbix} strike, and a space provider all arrive as a
- * {@link MinecraftFont.GlyphData} whose {@link MinecraftFont.GlyphData#kind() kind} drives the draw
- * path.
+ * Painting is not polymorphic over {@code GlyphVector}: AWT does not paint the vector you hand it, it
+ * extracts the glyph codes and positions and rasterizes through its own native pipeline - and that
+ * pipeline paints an {@code sbix} strike blank while zeroing the advances (both probe-proven). Nor
+ * can the abstract contract - vector outlines, point-space {@link java.awt.font.GlyphMetrics}, a
+ * backing {@link java.awt.Font} - be satisfied honestly for empty-{@code glyf} raster glyphs whose
+ * pixels live only in {@code sbix}. And the one renderer that consumes this type,
+ * {@link MinecraftGraphics}, blits from {@link MinecraftGlyph} bitmaps and never calls
+ * {@code drawGlyphVector}. Extending {@code GlyphVector} would therefore only make broken AWT calls
+ * compile while adding dead API surface, so this type owns positioning and painting itself.
+ * <p>
+ * It does so uniformly for both {@link MinecraftFont} kinds: layout walks codepoints, resolves each
+ * through {@link MinecraftFont#glyph(int)}, and accumulates pens from
+ * {@link MinecraftGlyph#signedAdvance()}. There is no vanilla-vs-colour branch - a mono atlas glyph,
+ * a colour {@code sbix} strike, and a space provider all arrive as a {@link MinecraftGlyph} whose
+ * {@link MinecraftGlyph#kind() kind} drives the draw path.
  * <p>
  * Because the very same {@link MinecraftFont#glyph(int)} feeds {@link MinecraftFontMetrics}, the
  * measure path and the draw path agree exactly: {@link #advanceX()} equals
@@ -32,10 +38,10 @@ import java.util.Optional;
 public final class MinecraftGlyphVector {
 
     private final @NotNull MinecraftFont font;
-    private final @NotNull List<PositionedGlyph> glyphs;
+    private final @NotNull List<MinecraftGlyph> glyphs;
     private final double advanceX;
 
-    private MinecraftGlyphVector(@NotNull MinecraftFont font, @NotNull List<PositionedGlyph> glyphs, double advanceX) {
+    private MinecraftGlyphVector(@NotNull MinecraftFont font, @NotNull List<MinecraftGlyph> glyphs, double advanceX) {
         this.font = font;
         this.glyphs = glyphs;
         this.advanceX = advanceX;
@@ -45,17 +51,18 @@ public final class MinecraftGlyphVector {
      * Lays out a run of text for any font. The single layout entry point for both font kinds.
      * <p>
      * Each codepoint resolves through {@link MinecraftFont#glyph(int)}: a vanilla atlas glyph, a
-     * colour {@code sbix} strike, or a space provider all arrive as a {@link MinecraftFont.GlyphData}.
-     * Pen positions accumulate from {@link MinecraftFont.GlyphData#signedAdvance()} - never from
+     * colour {@code sbix} strike, or a space provider all arrive as a {@link MinecraftGlyph}. Pen
+     * positions accumulate from {@link MinecraftGlyph#signedAdvance()} - never from
      * {@link java.awt.font.GlyphVector#getGlyphPosition}, which {@code sbix} zeroes - so the loop is
-     * identical whichever kind the font is.
+     * identical whichever kind the font is. Each cached glyph is stamped with its pen through
+     * {@link MinecraftGlyph#at(double)}.
      *
      * @param font the font to lay the text out in
      * @param text the text to lay out
      * @return the positioned glyph vector
      */
     static @NotNull MinecraftGlyphVector of(@NotNull MinecraftFont font, @NotNull String text) {
-        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<MinecraftGlyph> glyphs = new ArrayList<>();
 
         double pen = 0.0;
         int i = 0;
@@ -63,12 +70,9 @@ public final class MinecraftGlyphVector {
             int codepoint = text.codePointAt(i);
             i += Character.charCount(codepoint);
 
-            MinecraftFont.GlyphData glyph = font.glyph(codepoint);
-            double advance = glyph.signedAdvance();
-            glyphs.add(new PositionedGlyph(
-                codepoint, glyph.kind(), pen, advance, glyph,
-                glyph.gid(), glyph.strikePpem(), glyph.originX(), glyph.originY()));
-            pen += advance;
+            MinecraftGlyph glyph = font.glyph(codepoint);
+            glyphs.add(glyph.at(pen));
+            pen += glyph.signedAdvance();
         }
 
         return new MinecraftGlyphVector(font, List.copyOf(glyphs), pen);
@@ -107,12 +111,12 @@ public final class MinecraftGlyphVector {
     }
 
     /**
-     * Returns the positioned glyph at an index.
+     * Returns the positioned glyph at an index - a {@link MinecraftGlyph} stamped with its pen.
      *
      * @param index the glyph index
      * @return the positioned glyph
      */
-    public @NotNull PositionedGlyph positionedGlyph(int index) {
+    public @NotNull MinecraftGlyph positionedGlyph(int index) {
         return this.glyphs.get(index);
     }
 
@@ -124,7 +128,7 @@ public final class MinecraftGlyphVector {
      * @return the translated outline, or empty for non-mono glyphs
      */
     public @NotNull Optional<Shape> outline(int index) {
-        PositionedGlyph glyph = this.glyphs.get(index);
+        MinecraftGlyph glyph = this.glyphs.get(index);
         if (glyph.kind() != Kind.MONO) return Optional.empty();
         return this.font.monoOutline(glyph.codepoint(), glyph.penX());
     }
@@ -176,31 +180,5 @@ public final class MinecraftGlyphVector {
         MONO
 
     }
-
-    /**
-     * A single positioned glyph in a laid-out run.
-     *
-     * @param codepoint the Unicode codepoint
-     * @param kind the glyph kind
-     * @param penX the cumulative pen position in output pixels (may be negative)
-     * @param advance the signed advance in output pixels
-     * @param glyph the resolved glyph data (never {@code null}; a space provider is a
-     * {@link Kind#SPACE} sentinel)
-     * @param gid the strike glyph id, or {@code -1} for non-raster glyphs
-     * @param strikePpem the strike ppem, or {@code -1} for non-raster glyphs
-     * @param originX the origin X offset in output pixels
-     * @param originY the origin Y offset in output pixels
-     */
-    public record PositionedGlyph(
-        int codepoint,
-        @NotNull Kind kind,
-        double penX,
-        double advance,
-        @Nullable MinecraftFont.GlyphData glyph,
-        int gid,
-        int strikePpem,
-        int originX,
-        int originY
-    ) {}
 
 }

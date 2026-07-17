@@ -33,7 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * The unified home for every Minecraft-style font, whether a vanilla monospace atlas or a pack
  * colour ({@code sbix}) font. It is a sealed interface so a single downstream surface -
  * {@link #glyph(int)}, {@link #metrics()}, {@link #fontId()}, {@link #layout(String)} - serves both
- * kinds with no caller-side type gating.
+ * kinds with no caller-side type gating. Every codepoint resolves through {@link #glyph(int)} into a
+ * single {@link MinecraftGlyph}, so cache, layout, and blit all speak one glyph type.
  * <p>
  * Two implementations exist:
  * <ul>
@@ -49,7 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * ({@code minecraft:default}, {@code minecraft:default/bold}, ...) so consumers iterate
  * {@link #fontIds()} rather than switching on the enum.
  *
- * @see GlyphData
+ * @see MinecraftGlyph
  * @see MinecraftFontMetrics
  * @see MinecraftGlyphVector
  */
@@ -98,18 +99,20 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
     // --- shared surface ---
 
     /**
-     * Returns the glyph data for a codepoint, rasterizing or resolving it on first access and
-     * caching the result. Never returns {@code null}: an advance-only glyph (a pack space provider,
-     * or a colour row whose strike failed to decode) is modelled as a {@link Kind#SPACE} sentinel.
+     * Returns the glyph for a codepoint, rasterizing or resolving it on first access and caching the
+     * result. Never returns {@code null}: an advance-only glyph (a pack space provider, or a colour
+     * row whose strike failed to decode) is modelled as a {@link MinecraftGlyphVector.Kind#SPACE}
+     * sentinel. The returned glyph is the canonical cached instance ({@link MinecraftGlyph#penX() penX}
+     * {@code == 0}); layout stamps each occurrence with its pen.
      *
      * @param codepoint the Unicode codepoint
-     * @return the glyph data
+     * @return the glyph
      */
-    @NotNull GlyphData glyph(int codepoint);
+    @NotNull MinecraftGlyph glyph(int codepoint);
 
     /**
      * Returns the font's metrics - advances and line geometry, all derived from
-     * {@link GlyphData#signedAdvance()} so measurement and layout agree exactly.
+     * {@link MinecraftGlyph#signedAdvance()} so measurement and layout agree exactly.
      *
      * @return the font metrics
      */
@@ -124,7 +127,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
 
     /**
      * Lays out a run of text into a positioned glyph vector. The one layout entry point for both
-     * font kinds; the vector positions its pens from {@link GlyphData#signedAdvance()} with no
+     * font kinds; the vector positions its pens from {@link MinecraftGlyph#signedAdvance()} with no
      * vanilla-vs-colour branch.
      *
      * @param text the text to lay out
@@ -295,7 +298,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
         private final @NotNull FontRenderContext awtFrc;
 
         @Getter(lombok.AccessLevel.NONE)
-        private final @NotNull ConcurrentMap<Integer, GlyphData> glyphCache;
+        private final @NotNull ConcurrentMap<Integer, MinecraftGlyph> glyphCache;
 
         Vanilla(@NotNull String fileName, @NotNull Style style, @NotNull String fontId) {
             Resolved resolved = resolveFont(fileName);
@@ -339,7 +342,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
         }
 
         @Override
-        public @NotNull GlyphData glyph(int codepoint) {
+        public @NotNull MinecraftGlyph glyph(int codepoint) {
             return this.glyphCache.computeIfAbsent(codepoint, this::rasterizeGlyph);
         }
 
@@ -366,7 +369,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
          * up a throwaway scratch {@link Graphics2D} for every codepoint - only the per-glyph
          * {@link BufferedImage} (sized to the visual bounds) is newly allocated.
          */
-        private @NotNull GlyphData rasterizeGlyph(int codepoint) {
+        private @NotNull MinecraftGlyph rasterizeGlyph(int codepoint) {
             int advanceWidth = this.awtMetrics.charWidth(codepoint);
             char[] chars = Character.toChars(codepoint);
             GlyphVector gv = this.actual.createGlyphVector(this.awtFrc, chars);
@@ -389,7 +392,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
                 gg.dispose();
             }
 
-            return new GlyphData(PixelBuffer.wrap(glyphImage), advanceWidth, bearingX, bearingY);
+            return new MinecraftGlyph(codepoint, PixelBuffer.wrap(glyphImage), advanceWidth, bearingX, bearingY);
         }
 
         /**
@@ -473,114 +476,6 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftCo
          * Internal result of {@link #resolveFont}: the loaded AWT font plus the on-disk path of its {@code .otf}.
          */
         private record Resolved(@NotNull java.awt.Font font, @NotNull Path path) {}
-
-    }
-
-    /**
-     * Rasterized glyph data: the bitmap pixels and positioning metrics needed to blit the glyph at
-     * the correct location relative to the text cursor, plus the {@link Kind} that tells the draw
-     * path how to composite it.
-     * <p>
-     * Three kinds exist, all reached through the same {@link #glyph(int)} surface:
-     * <ul>
-     *   <li>{@link Kind#MONO} - a vanilla white-on-transparent atlas bitmap, tinted at draw time;
-     *   {@link #signedAdvance} equals the integer {@link #advanceWidth}. The four-argument
-     *   constructor produces this form and is the only shape the vanilla rasterizer uses, so the
-     *   mono path is unchanged byte-for-byte.</li>
-     *   <li>{@link Kind#RASTER} - a native RGBA colour ({@code sbix}) strike, blitted untinted; it
-     *   may carry a fractional/negative {@link #signedAdvance}, a non-zero origin, and the
-     *   {@link #gid}/{@link #strikePpem} the artwork came from.</li>
-     *   <li>{@link Kind#SPACE} - an advance-only sentinel over a 1x1 transparent bitmap; it moves the
-     *   pen (possibly backward) and paints nothing.</li>
-     * </ul>
-     *
-     * @param bitmap the glyph pixels (white-on-transparent for mono, native RGBA for colour, 1x1
-     * transparent for space)
-     * @param advanceWidth the integer horizontal cursor advance after this glyph, in output pixels
-     * @param bearingX the left bearing - horizontal offset from cursor to left edge of bitmap
-     * @param bearingY the top bearing - vertical offset from baseline to top edge of bitmap
-     * @param color whether the bitmap is native colour artwork (never tinted) rather than mono
-     * @param signedAdvance the signed, possibly fractional advance in output pixels; equals
-     * {@link #advanceWidth} for mono glyphs
-     * @param originX the glyph origin X offset in output pixels (0 for mono/space glyphs)
-     * @param originY the glyph origin Y offset in output pixels (0 for mono/space glyphs)
-     * @param gid the {@code sbix} glyph id the strike came from, or {@code -1} for mono/space glyphs
-     * @param strikePpem the {@code sbix} strike ppem, or {@code -1} for mono/space glyphs
-     * @param kind the glyph kind driving the draw path
-     */
-    record GlyphData(
-        @NotNull PixelBuffer bitmap,
-        int advanceWidth,
-        int bearingX,
-        int bearingY,
-        boolean color,
-        float signedAdvance,
-        int originX,
-        int originY,
-        int gid,
-        int strikePpem,
-        MinecraftGlyphVector.@NotNull Kind kind
-    ) {
-
-        /**
-         * A shared 1x1 fully-transparent bitmap backing every {@link Kind#SPACE} sentinel. Immutable
-         * in practice - the blit path only reads glyph bitmaps - so one instance is safe to share.
-         */
-        private static final @NotNull PixelBuffer SPACE_BITMAP = PixelBuffer.create(1, 1);
-
-        /**
-         * Constructs a monochrome glyph: {@code color = false}, {@code signedAdvance = advanceWidth},
-         * a zero origin, and {@link Kind#MONO}. This is the vanilla rasterization form.
-         *
-         * @param bitmap the white-on-transparent glyph pixels
-         * @param advanceWidth the integer horizontal cursor advance
-         * @param bearingX the left bearing
-         * @param bearingY the top bearing
-         */
-        public GlyphData(@NotNull PixelBuffer bitmap, int advanceWidth, int bearingX, int bearingY) {
-            this(bitmap, advanceWidth, bearingX, bearingY, false, advanceWidth, 0, 0, -1, -1, MinecraftGlyphVector.Kind.MONO);
-        }
-
-        /**
-         * Constructs a colour glyph from a native RGBA bitmap and sidecar-sourced positioning,
-         * without strike provenance.
-         *
-         * @param bitmap the native RGBA artwork
-         * @param signedAdvance the signed, possibly fractional advance in output pixels
-         * @param originX the origin X offset in output pixels
-         * @param originY the origin Y offset in output pixels
-         * @return the colour glyph data
-         */
-        public static @NotNull GlyphData color(@NotNull PixelBuffer bitmap, float signedAdvance, int originX, int originY) {
-            return color(bitmap, signedAdvance, originX, originY, -1, -1);
-        }
-
-        /**
-         * Constructs a colour glyph from a native RGBA bitmap, sidecar-sourced positioning, and the
-         * {@code sbix} strike it was decoded from. The origin doubles as the blit bearing.
-         *
-         * @param bitmap the native RGBA artwork
-         * @param signedAdvance the signed, possibly fractional advance in output pixels
-         * @param originX the origin X offset in output pixels
-         * @param originY the origin Y offset in output pixels
-         * @param gid the strike glyph id
-         * @param strikePpem the strike ppem
-         * @return the colour glyph data
-         */
-        public static @NotNull GlyphData color(@NotNull PixelBuffer bitmap, float signedAdvance, int originX, int originY, int gid, int strikePpem) {
-            return new GlyphData(bitmap, Math.round(signedAdvance), originX, originY, true, signedAdvance, originX, originY, gid, strikePpem, MinecraftGlyphVector.Kind.RASTER);
-        }
-
-        /**
-         * Constructs an advance-only {@link Kind#SPACE} sentinel: a 1x1 transparent bitmap that moves
-         * the pen by {@code signedAdvance} (possibly backward) and paints nothing.
-         *
-         * @param signedAdvance the signed, possibly fractional advance in output pixels
-         * @return the space glyph data
-         */
-        public static @NotNull GlyphData space(float signedAdvance) {
-            return new GlyphData(SPACE_BITMAP, Math.round(signedAdvance), 0, 0, false, signedAdvance, 0, 0, -1, -1, MinecraftGlyphVector.Kind.SPACE);
-        }
 
     }
 
