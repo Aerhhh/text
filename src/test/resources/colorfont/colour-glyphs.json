@@ -1,86 +1,96 @@
 {
-  "fonts": [
-    {
-      "file": "SynthColour-demo.ttf",
-      "font_id": "synth:demo"
-    },
-    {
-      "file": "SynthColour-alt.ttf",
-      "font_id": "synth:alt"
-    }
-  ],
+  "file": "SynthColour.ttf",
   "generator_version": "1.0.0",
   "glyphs": [
     {
       "advance": 1024,
       "codepoint": 57345,
-      "font_id": "synth:demo",
+      "font_id": "synth:alt",
       "gid": 1,
-      "glyphName": "uE001",
+      "glyphName": "u0F0000",
       "origin": [
         0,
         0
       ],
+      "stored_codepoint": 983040,
+      "strike_ppem": 8
+    },
+    {
+      "advance": 1024,
+      "codepoint": 57345,
+      "font_id": "synth:demo",
+      "gid": 2,
+      "glyphName": "u0F0001",
+      "origin": [
+        0,
+        0
+      ],
+      "stored_codepoint": 983041,
       "strike_ppem": 8
     },
     {
       "advance": 1024,
       "codepoint": 57346,
       "font_id": "synth:demo",
-      "gid": 2,
-      "glyphName": "uE002",
+      "gid": 3,
+      "glyphName": "u0F0002",
       "origin": [
         0,
         0
       ],
+      "stored_codepoint": 983042,
       "strike_ppem": 8
     },
     {
       "advance": 1024,
       "codepoint": 57347,
       "font_id": "synth:demo",
-      "gid": 1,
-      "glyphName": "uE001",
+      "gid": 2,
+      "glyphName": "u0F0001",
       "origin": [
         0,
         0
       ],
+      "stored_codepoint": 983043,
       "strike_ppem": 8
     },
     {
       "advance": 1024,
       "codepoint": 57348,
       "font_id": "synth:demo",
-      "gid": 3,
-      "glyphName": "uE004",
+      "gid": 4,
+      "glyphName": "u0F0004",
       "origin": [
         0,
         0
       ],
+      "stored_codepoint": 983044,
       "strike_ppem": 8
     },
     {
       "advance": 512,
       "codepoint": 57349,
       "font_id": "synth:demo",
-      "gid": 4,
-      "glyphName": "uE005",
+      "gid": 5,
+      "glyphName": "u0F0005",
       "origin": [
         0,
         0
       ],
+      "stored_codepoint": 983045,
       "strike_ppem": 16
     },
     {
       "advance": 1024,
       "codepoint": 57350,
       "font_id": "synth:demo",
-      "gid": 5,
-      "glyphName": "uE006",
+      "gid": 6,
+      "glyphName": "u0F0006",
       "origin": [
         0,
         0
       ],
+      "stored_codepoint": 983046,
       "strike_ppem": 8
     },
     {
@@ -93,6 +103,7 @@
         0,
         0
       ],
+      "stored_codepoint": null,
       "strike_ppem": null
     },
     {
@@ -105,23 +116,12 @@
         0,
         0
       ],
+      "stored_codepoint": null,
       "strike_ppem": null
-    },
-    {
-      "advance": 1024,
-      "codepoint": 57345,
-      "font_id": "synth:alt",
-      "gid": 1,
-      "glyphName": "uE001",
-      "origin": [
-        0,
-        0
-      ],
-      "strike_ppem": 8
     }
   ],
   "graphic_type": "png ",
-  "schema_version": 1,
+  "schema_version": 2,
   "source_date_epoch": 0,
   "units_per_em": 1024
 }

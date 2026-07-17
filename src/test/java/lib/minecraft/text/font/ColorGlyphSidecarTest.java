@@ -10,6 +10,8 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -153,13 +155,17 @@ class ColorGlyphSidecarTest {
     }
 
     @Test
-    @DisplayName("the committed fixture sidecar exposes both font ids")
+    @DisplayName("the committed fixture sidecar maps both font ids to the one merged file")
     void fixtureSidecarHasBothFontIds() {
         ColorGlyphSidecar sidecar = ColorFontFixtures.sidecar();
-        assertThat(sidecar.fileFor(ColorFontFixtures.DEMO), is(Optional.of("SynthColour-demo.ttf")));
-        assertThat(sidecar.fileFor(ColorFontFixtures.ALT), is(Optional.of("SynthColour-alt.ttf")));
+        assertThat(sidecar.schemaVersion(), is(2));
+        assertThat(sidecar.file(), is(Optional.of("SynthColour.ttf")));
+        // both font ids resolve to the single merged file
+        assertThat(sidecar.fileFor(ColorFontFixtures.DEMO), is(Optional.of("SynthColour.ttf")));
+        assertThat(sidecar.fileFor(ColorFontFixtures.ALT), is(Optional.of("SynthColour.ttf")));
         assertThat(sidecar.unitsPerEm(), is(1024));
-        assertThat(sidecar.lookup(ColorFontFixtures.DEMO, ColorFontFixtures.CP_FLAT).orElseThrow().gid(), is(1));
+        assertThat(sidecar.lookup(ColorFontFixtures.DEMO, ColorFontFixtures.CP_FLAT).orElseThrow().gid(),
+            is(ColorFontFixtures.GID_FLAT));
     }
 
     @Test
@@ -168,6 +174,41 @@ class ColorGlyphSidecarTest {
         ColorGlyphSidecar sidecar = ColorFontFixtures.sidecar();
         assertThat(sidecar.lookup(ColorFontFixtures.DEMO, ColorFontFixtures.CP_FLAT).isPresent(), is(true));
         assertThat(sidecar.lookup(ColorFontFixtures.ALT, ColorFontFixtures.CP_FLAT).isPresent(), is(true));
+    }
+
+    @Test
+    @DisplayName("the reused codepoint maps to distinct stored codepoints under each font id")
+    void reusedCodepointHasDistinctStoredCodepoints() {
+        ColorGlyphSidecar sidecar = ColorFontFixtures.sidecar();
+        GlyphRow demo = sidecar.lookup(ColorFontFixtures.DEMO, ColorFontFixtures.CP_FLAT).orElseThrow();
+        GlyphRow alt = sidecar.lookup(ColorFontFixtures.ALT, ColorFontFixtures.CP_FLAT).orElseThrow();
+
+        // same original codepoint, but distinct stored codepoints in plane 15 -> distinct gids
+        assertThat(demo.codepoint(), is(alt.codepoint()));
+        assertThat(demo.storedCodepoint(), notNullValue());
+        assertThat(demo.storedCodepoint() >= 0xF0000, is(true));
+        assertThat(alt.storedCodepoint() >= 0xF0000, is(true));
+        assertFalse(demo.storedCodepoint().equals(alt.storedCodepoint()));
+        assertFalse(demo.gid().equals(alt.gid()));
+    }
+
+    @Test
+    @DisplayName("stored_codepoint parses and is null for space rows")
+    void storedCodepointParsing() {
+        ColorGlyphSidecar sidecar = parse("""
+            {
+              "schema_version": 2, "file": "Merged.ttf",
+              "glyphs": [
+                {"font_id": "ns:a", "codepoint": 57345, "stored_codepoint": 983041, "gid": 1,
+                 "advance": 100, "strike_ppem": 8},
+                {"font_id": "ns:a", "codepoint": 57360, "stored_codepoint": null, "gid": null,
+                 "advance": -16384, "strike_ppem": null}
+              ]
+            }
+            """);
+        assertThat(sidecar.lookup(FontId.parse("ns:a"), 57345).orElseThrow().storedCodepoint(), is(983041));
+        assertThat(sidecar.lookup(FontId.parse("ns:a"), 57360).orElseThrow().storedCodepoint(), is((Integer) null));
+        assertThat(sidecar.file(), is(Optional.of("Merged.ttf")));
     }
 
 }

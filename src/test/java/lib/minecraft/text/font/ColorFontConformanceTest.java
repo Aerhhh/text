@@ -33,7 +33,7 @@ class ColorFontConformanceTest {
         MinecraftColorFont font = MinecraftColorFont.load(ColorFontFixtures.DEMO);
         assertThat(font.fontId(), is(ColorFontFixtures.DEMO));
         assertThat(font.sidecar().unitsPerEm(), is(1024));
-        assertThat(font.reader().numGlyphs(), is(6));
+        assertThat(font.reader().numGlyphs(), is(ColorFontFixtures.NUM_GLYPHS));
     }
 
     @Test

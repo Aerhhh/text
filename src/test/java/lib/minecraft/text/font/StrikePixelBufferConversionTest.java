@@ -36,16 +36,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StrikePixelBufferConversionTest {
 
     /**
-     * The committed demo fixture strikes at realistic glyph sizes (8x8 and 16x16). The 256x256
-     * pathological strike (gid 5) is measured separately.
+     * The committed fixture strikes at realistic glyph sizes (8x8 and 16x16), by merged gid. The
+     * 256x256 pathological strike (gid 6) is measured separately.
      */
     private static final @NotNull List<int[]> REALISTIC_STRIKES = List.of(
-        new int[]{1, 8},    // CP_FLAT, 8x8
-        new int[]{2, 8},    // CP_AA, 8x8
-        new int[]{3, 8},    // CP_MID, 16x16
-        new int[]{4, 16});  // CP_DOWNSCALED, 16x16 at ppem 16
+        new int[]{ColorFontFixtures.GID_FLAT, 8},         // demo E001, 8x8
+        new int[]{ColorFontFixtures.GID_AA, 8},           // demo E002, 8x8
+        new int[]{ColorFontFixtures.GID_MID, 8},          // demo E004, 16x16
+        new int[]{ColorFontFixtures.GID_DOWNSCALED, 16}); // demo E005, 16x16 at ppem 16
 
-    private static final int[] TALL_STRIKE = {5, 8};   // CP_TALL, 256x256
+    private static final int[] TALL_STRIKE = {ColorFontFixtures.GID_TALL, 8};   // demo E006, 256x256
 
     // --- (a) pixel-exact equivalence ---
 
@@ -53,7 +53,7 @@ class StrikePixelBufferConversionTest {
     @DisplayName("every fixture strike caches pixel-identically as PixelBuffer and as BufferedImage")
     void pixelExactAcrossEveryFixtureStrike() {
         MinecraftColorFont font = ColorFontFixtures.demoFont();
-        SbixReader reader = new SbixReader(ColorFontFixtures.bytes("SynthColour-demo.ttf"));
+        SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
 
         int comparedStrikes = 0;
         for (int[] strike : concat(REALISTIC_STRIKES, TALL_STRIKE)) {
@@ -96,7 +96,7 @@ class StrikePixelBufferConversionTest {
     @DisplayName("caching PixelBuffer instead of BufferedImage sheds the per-strike object-graph overhead")
     void pixelBufferRetainsFewerBytesThanBufferedImage() {
         MinecraftColorFont font = ColorFontFixtures.demoFont();
-        SbixReader reader = new SbixReader(ColorFontFixtures.bytes("SynthColour-demo.ttf"));
+        SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
 
         long biTotal = 0;
         long pbTotal = 0;

@@ -3,10 +3,15 @@
 Derived from the e2e-proto pipeline (impl-research/e2e-proto/e2e.py). Emits the
 committed fixtures consumed by the colour-font test suite:
 
-  colorfont/colour-glyphs.json   versioned sidecar covering two font ids
-  colorfont/SynthColour-demo.ttf sbix TrueType for font id synth:demo
-  colorfont/SynthColour-alt.ttf  sbix TrueType for font id synth:alt (PUA reuse)
+  colorfont/colour-glyphs.json   versioned (schema v2) single-file sidecar
+  colorfont/SynthColour.ttf      ONE merged sbix TrueType for both font ids
   colorfont/SynthColour-edge.ttf sbix TrueType exercising dupe + non-png records
+
+Mirrors the fontgen single-file colour output: every (font_id, original_codepoint)
+raster pair is assigned a synthetic STORED codepoint from plane 15/16, so the two
+font ids (synth:demo and synth:alt reuse U+E001) coexist in one merged font whose
+cmap keys on stored codepoints. The sidecar bridges pack + original codepoint back
+to the stored codepoint and gid.
 
 Everything is synthetic - no real pack assets. Deterministic under a pinned epoch
 so the committed bytes never drift between machines.
@@ -27,8 +32,9 @@ ASCENT = (DEFAULT_GLYPH_SIZE - 1) * (UNITS_PER_EM // DEFAULT_GLYPH_SIZE)   # 896
 DESCENT = -(UNITS_PER_EM // DEFAULT_GLYPH_SIZE)                            # -128
 EPOCH = 0
 GRAPHIC_TYPE = "png "
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 GENERATOR_VERSION = "1.0.0"
+STORED_CP_START = 0xF0000   # plane 15; stored codepoints are assigned linearly from here
 
 # classifier thresholds (mirror the fontgen colour classifier)
 OPQ_A, AA_LO, SIG_COVER, SIG_MIN, AA_FLAT_MAX, HUGE = 240, 8, 0.02, 15, 0.02, 128
@@ -120,36 +126,49 @@ def encode_png(cell):
     return buf.getvalue()
 
 
-# each tile: dict(codepoint, cell, cw, ch, height) ; space rows: (codepoint, advance)
+# each spec: dict(font_id, tiles=[dict(codepoint, cell, cw, ch, height)], space=[(cp, adv)])
 # The colour layer is raster + space only. Mono-classified cells belong to the mono
 # font (the runtime falls back to the vanilla atlas for them), so they are dropped here.
-def build_font(font_name, tiles, space_rows, font_id):
-    embed = {}          # png sha -> glyph name
-    raster_png = {}      # glyph name -> png bytes
-    records = []         # ordered per-codepoint
-    for t in sorted(tiles, key=lambda x: x["codepoint"]):
-        cp = t["codepoint"]
-        gname = "u%04X" % cp
-        mode = classify(t["cell"])
-        if mode == "mono":
-            continue     # not a colour glyph; handled by the mono font / vanilla fallback
-        display_scale = t["height"] / t["ch"]
-        ppem = round(DEFAULT_GLYPH_SIZE / display_scale)
-        png = encode_png(t["cell"])
-        h = hashlib.sha256(png).hexdigest()
-        if h in embed:
-            gname = embed[h]
-        else:
-            embed[h] = gname
-            raster_png[gname] = png
-        adv = round(t["cw"] * (UNITS_PER_EM / t["ch"]) * display_scale)
-        records.append(dict(cp=cp, gname=gname, advance=adv, ppem=ppem, png_sha=h))
+def build_merged_font(font_name, specs):
+    """Builds ONE merged sbix font over every spec's raster tiles, plus the schema-v2
+    sidecar rows. Stored codepoints are allocated from U+F0000 over the raster pairs
+    sorted by (font_id, original_codepoint); identical art dedups to one gid."""
+    # 1. Collect raster tiles across all font ids, tagged with their font id.
+    raster = []   # dict(font_id, cp, cell, advance, ppem, png, sha)
+    for spec in specs:
+        for t in spec["tiles"]:
+            if classify(t["cell"]) == "mono":
+                continue     # handled by the mono font / vanilla fallback
+            display_scale = t["height"] / t["ch"]
+            ppem = round(DEFAULT_GLYPH_SIZE / display_scale)
+            png = encode_png(t["cell"])
+            raster.append(dict(font_id=spec["font_id"], cp=t["codepoint"],
+                               advance=round(t["cw"] * (UNITS_PER_EM / t["ch"]) * display_scale),
+                               ppem=ppem, png=png, sha=hashlib.sha256(png).hexdigest()))
 
+    # 2. Deterministic stored-codepoint allocation over sorted (font_id, cp) pairs.
+    raster.sort(key=lambda r: (r["font_id"], r["cp"]))
+    stored_of = {}
+    cursor = STORED_CP_START
+    for r in raster:
+        stored_of[(r["font_id"], r["cp"])] = cursor
+        cursor += 1
+
+    # 3. Pack-wide content dedup: sha -> glyph name (named from the first pair's stored cp).
+    embed = {}          # sha -> glyph name
+    raster_png = {}      # glyph name -> png bytes
     order = [".notdef"]
-    seen = {".notdef"}
-    for gn in sorted(raster_png):
-        if gn not in seen:
-            order.append(gn); seen.add(gn)
+    for r in raster:
+        stored = stored_of[(r["font_id"], r["cp"])]
+        if r["sha"] in embed:
+            r["gname"] = embed[r["sha"]]
+        else:
+            gname = "u%06X" % stored
+            embed[r["sha"]] = gname
+            raster_png[gname] = r["png"]
+            order.append(gname)
+            r["gname"] = gname
+    gid_of = {gn: i for i, gn in enumerate(order)}
 
     f = _new_ttfont(font_name)
     glyf = newTable("glyf"); glyf.glyphs = {}
@@ -159,24 +178,23 @@ def build_font(font_name, tiles, space_rows, font_id):
     f["glyf"] = glyf
     f["loca"] = newTable("loca")
     f.setGlyphOrder(order); glyf.glyphOrder = order
-    gid_of = {gn: i for i, gn in enumerate(order)}
 
-    adv_by = {}
-    for r in records:
-        adv_by[r["gname"]] = r["advance"]
+    adv_by = {r["gname"]: r["advance"] for r in raster}
     hmtx = newTable("hmtx"); hmtx.metrics = {".notdef": (UNITS_PER_EM // 2, 0)}
     for gn in order[1:]:
         hmtx.metrics[gn] = (max(0, min(0xFFFF, adv_by.get(gn, 0))), 0)
     f["hmtx"] = hmtx
 
-    cmap_dict = {r["cp"]: r["gname"] for r in records}
+    # cmap keys on the STORED codepoint (all > U+FFFF, so format-12 only).
+    cmap_dict = {stored_of[(r["font_id"], r["cp"])]: r["gname"] for r in raster}
     f["cmap"] = _cmap(cmap_dict)
 
     strikes = {}
     max_h = 0
-    for r in records:
-        png = raster_png[r["gname"]]
-        strikes.setdefault(r["ppem"], {})[r["gname"]] = png
+    for gn, png in raster_png.items():
+        # each glyph lives in the ppem of the first raster row that minted it
+        ppem = next(r["ppem"] for r in raster if r["gname"] == gn)
+        strikes.setdefault(ppem, {})[gn] = png
         max_h = max(max_h, Image.open(io.BytesIO(png)).size[1])
     if strikes:
         _attach_sbix(f, strikes)
@@ -184,16 +202,19 @@ def build_font(font_name, tiles, space_rows, font_id):
     _finish_tables(f, order, max_h)
 
     rows = []
-    for r in sorted(records, key=lambda x: x["cp"]):
-        rows.append(dict(font_id=font_id, codepoint=r["cp"], glyphName=r["gname"],
-                         gid=gid_of[r["gname"]], advance=r["advance"],
+    for r in raster:
+        stored = stored_of[(r["font_id"], r["cp"])]
+        rows.append(dict(font_id=r["font_id"], codepoint=r["cp"], stored_codepoint=stored,
+                         glyphName=r["gname"], gid=gid_of[r["gname"]], advance=r["advance"],
                          origin=[0, 0], strike_ppem=r["ppem"]))
-    covered = {r["cp"] for r in records}
-    for cp, adv in sorted(space_rows):
-        if cp in covered:
-            continue
-        rows.append(dict(font_id=font_id, codepoint=cp, glyphName=None, gid=None,
-                         advance=adv, origin=[0, 0], strike_ppem=None))
+    covered = {(r["font_id"], r["cp"]) for r in raster}
+    for spec in specs:
+        for cp, adv in spec["space"]:
+            if (spec["font_id"], cp) in covered:
+                continue
+            rows.append(dict(font_id=spec["font_id"], codepoint=cp, stored_codepoint=None,
+                             glyphName=None, gid=None, advance=adv, origin=[0, 0], strike_ppem=None))
+    rows.sort(key=lambda x: (x["font_id"], x["codepoint"], x["glyphName"] or ""))
     return f, rows
 
 
@@ -332,19 +353,22 @@ def main(out_dir):
         dict(codepoint=0xE002, cell=a[:, 16:24].copy(), cw=8, ch=8, height=8),    # aa multi
         dict(codepoint=0xE003, cell=a[:, 24:32].copy(), cw=8, ch=8, height=8),    # dup of E001
         dict(codepoint=0xE004, cell=cell_b(), cw=16, ch=16, height=16),           # flat, ppem 8
-        dict(codepoint=0xE005, cell=cell_c(), cw=16, ch=16, height=8),            # multi, ppem 4
+        dict(codepoint=0xE005, cell=cell_c(), cw=16, ch=16, height=8),            # multi, ppem 16
         dict(codepoint=0xE006, cell=cell_d(), cw=256, ch=256, height=256),        # tall art, ppem 8
     ]
     demo_space = [(0xE010, -1024), (0xE011, 96)]   # negative (-16px) ; fractional (96/64 = 1.5px)
-    demo_font, demo_rows = build_font("SynthColour-demo", demo_tiles, demo_space, "synth:demo")
-
     alt_tiles = [dict(codepoint=0xE001, cell=cell_alt(), cw=8, ch=8, height=8)]
-    alt_font, alt_rows = build_font("SynthColour-alt", alt_tiles, [], "synth:alt")
+
+    # ONE merged font for both font ids. "synth:alt" sorts before "synth:demo", so alt's
+    # single glyph takes gid 1 and demo's glyphs follow at gids 2..6.
+    merged_font, rows = build_merged_font("SynthColour", [
+        dict(font_id="synth:alt", tiles=alt_tiles, space=[]),
+        dict(font_id="synth:demo", tiles=demo_tiles, space=demo_space),
+    ])
 
     edge_font = build_edge_font()
 
-    save(demo_font, os.path.join(out_dir, "SynthColour-demo.ttf"))
-    save(alt_font, os.path.join(out_dir, "SynthColour-alt.ttf"))
+    save(merged_font, os.path.join(out_dir, "SynthColour.ttf"))
     save(edge_font, os.path.join(out_dir, "SynthColour-edge.ttf"))
 
     sidecar = {
@@ -353,11 +377,8 @@ def main(out_dir):
         "source_date_epoch": EPOCH,
         "units_per_em": UNITS_PER_EM,
         "graphic_type": GRAPHIC_TYPE,
-        "fonts": [
-            {"font_id": "synth:demo", "file": "SynthColour-demo.ttf"},
-            {"font_id": "synth:alt", "file": "SynthColour-alt.ttf"},
-        ],
-        "glyphs": demo_rows + alt_rows,
+        "file": "SynthColour.ttf",
+        "glyphs": rows,
     }
     with open(os.path.join(out_dir, "colour-glyphs.json"), "w", encoding="utf-8") as fh:
         json.dump(sidecar, fh, ensure_ascii=False, indent=2, sort_keys=True)

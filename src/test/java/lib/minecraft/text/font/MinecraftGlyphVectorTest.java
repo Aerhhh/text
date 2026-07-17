@@ -61,7 +61,7 @@ class MinecraftGlyphVectorTest {
         MinecraftGraphics graphics = new MinecraftGraphics(target);
         vector.paint(graphics, 0, 0, Color.RED);
 
-        PixelBuffer source = font.strike(1, 8).orElseThrow();
+        PixelBuffer source = font.strike(ColorFontFixtures.GID_FLAT, 8).orElseThrow();
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++)
                 assertThat("pixel (" + x + "," + y + ")", target.getPixel(x, y), is(source.getPixel(x, y)));
@@ -76,16 +76,16 @@ class MinecraftGlyphVectorTest {
         // mcPixel, MC_PIXEL_SCALE = 2), and 2 != 3 so a swapped axis lands on a background pixel.
         ColorGlyphSidecar sidecar = ColorGlyphSidecar.parse(new StringReader("""
             {
-              "schema_version": 1, "units_per_em": 1024, "graphic_type": "png ",
-              "fonts": [{"font_id": "synth:demo", "file": "SynthColour-demo.ttf"}],
+              "schema_version": 2, "units_per_em": 1024, "graphic_type": "png ",
+              "file": "SynthColour.ttf",
               "glyphs": [
-                {"font_id": "synth:demo", "codepoint": 57345, "gid": 1,
+                {"font_id": "synth:demo", "codepoint": 57345, "stored_codepoint": 983041, "gid": 2,
                  "advance": 1024, "origin": [128, 192], "strike_ppem": 8}
               ]
             }
             """));
         MinecraftColorFont font = MinecraftColorFont.of(ColorFontFixtures.DEMO,
-            ColorFontFixtures.bytes("SynthColour-demo.ttf"), sidecar, MinecraftFont.Vanilla.REGULAR);
+            ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF), sidecar, MinecraftFont.Vanilla.REGULAR);
 
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
         MinecraftGlyphVector.PositionedGlyph glyph = vector.positionedGlyph(0);
@@ -162,8 +162,9 @@ class MinecraftGlyphVectorTest {
         MinecraftColorFont demo = ColorFontFixtures.demoFont();
         MinecraftColorFont alt = ColorFontFixtures.altFont();
 
-        PixelBuffer demoStrike = demo.strike(1, 8).orElseThrow();
-        PixelBuffer altStrike = alt.strike(1, 8).orElseThrow();
+        // the same original codepoint (E001) resolves to different merged gids per font id
+        PixelBuffer demoStrike = demo.strike(ColorFontFixtures.GID_FLAT, 8).orElseThrow();
+        PixelBuffer altStrike = alt.strike(ColorFontFixtures.GID_ALT_FLAT, 8).orElseThrow();
 
         assertThat(demoStrike.getPixel(0, 0), is(0xFFDC2828));   // demo E001 top-left red
         assertThat(altStrike.getPixel(0, 0), is(0xFF28C83C));    // alt E001 top-left green (40,200,60)
@@ -181,7 +182,7 @@ class MinecraftGlyphVectorTest {
         assertThat(downscaled.positionedGlyph(0).strikePpem(), is(16));
 
         // The ppem-16 strike carries the downscaled art (top-left red 200,30,30).
-        assertThat(font.strike(4, 16).orElseThrow().getPixel(0, 0), is(0xFFC81E1E));
+        assertThat(font.strike(ColorFontFixtures.GID_DOWNSCALED, 16).orElseThrow().getPixel(0, 0), is(0xFFC81E1E));
     }
 
     @Test
@@ -203,7 +204,7 @@ class MinecraftGlyphVectorTest {
     @DisplayName("regression: Java2D zeroes GlyphVector advances for an sbix font - our layout must not trust them")
     void glyphVectorAdvanceIsZeroRegression() throws Exception {
         Font awtFont = Font.createFont(Font.TRUETYPE_FONT,
-            new java.io.ByteArrayInputStream(ColorFontFixtures.bytes("SynthColour-demo.ttf"))).deriveFont(16.0f);
+            new java.io.ByteArrayInputStream(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF))).deriveFont(16.0f);
         FontRenderContext frc = new FontRenderContext(new AffineTransform(), true, true);
         GlyphVector awt = awtFont.createGlyphVector(frc, cp(ColorFontFixtures.CP_FLAT).repeat(3));
         double awtAdvance = awt.getGlyphPosition(awt.getNumGlyphs()).getX();

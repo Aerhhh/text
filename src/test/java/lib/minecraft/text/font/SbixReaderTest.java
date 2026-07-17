@@ -16,8 +16,8 @@ class SbixReaderTest {
     @Test
     @DisplayName("reports numGlyphs and every strike ppem")
     void reportsGlyphCountAndStrikes() {
-        SbixReader reader = new SbixReader(ColorFontFixtures.bytes("SynthColour-demo.ttf"));
-        assertThat(reader.numGlyphs(), is(6));
+        SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
+        assertThat(reader.numGlyphs(), is(ColorFontFixtures.NUM_GLYPHS));
         assertThat(reader.strikePpems().length, is(2));
         Integer[] ppems = {reader.strikePpems()[0], reader.strikePpems()[1]};
         assertThat(ppems, arrayContainingInAnyOrder(8, 16));
@@ -26,21 +26,21 @@ class SbixReaderTest {
     @Test
     @DisplayName("returns the PNG payload for a glyph in its strike and null for an empty strike slot")
     void returnsPngForPresentStrikeAndNullForEmpty() {
-        SbixReader reader = new SbixReader(ColorFontFixtures.bytes("SynthColour-demo.ttf"));
-        // gid 1 (flat) lives in strike ppem 8, not in ppem 16
-        assertThat(reader.strikePng(1, 8), notNullValue());
-        assertThat(reader.graphicType(1, 8), is("png "));
-        assertThat(reader.strikePng(1, 16), nullValue());
-        // gid 4 (downscaled) lives in strike ppem 16
-        assertThat(reader.strikePng(4, 16), notNullValue());
-        assertThat(reader.strikePng(4, 8), nullValue());
+        SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
+        // the flat glyph lives in strike ppem 8, not in ppem 16
+        assertThat(reader.strikePng(ColorFontFixtures.GID_FLAT, 8), notNullValue());
+        assertThat(reader.graphicType(ColorFontFixtures.GID_FLAT, 8), is("png "));
+        assertThat(reader.strikePng(ColorFontFixtures.GID_FLAT, 16), nullValue());
+        // the downscaled glyph lives in strike ppem 16
+        assertThat(reader.strikePng(ColorFontFixtures.GID_DOWNSCALED, 16), notNullValue());
+        assertThat(reader.strikePng(ColorFontFixtures.GID_DOWNSCALED, 8), nullValue());
     }
 
     @Test
     @DisplayName("the extracted PNG payload is a valid PNG (magic bytes intact)")
     void extractedPayloadIsValidPng() {
-        SbixReader reader = new SbixReader(ColorFontFixtures.bytes("SynthColour-demo.ttf"));
-        byte[] png = reader.strikePng(1, 8);
+        SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
+        byte[] png = reader.strikePng(ColorFontFixtures.GID_FLAT, 8);
         assertThat(png, notNullValue());
         // PNG signature: 89 50 4E 47 0D 0A 1A 0A
         byte[] signature = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};

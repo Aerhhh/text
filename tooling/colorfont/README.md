@@ -6,15 +6,16 @@ painted from scratch in the script - no real resource-pack assets are used or co
 
 It emits:
 
-- `SynthColour-demo.ttf` - an `sbix` TrueType for font id `synth:demo` with two strikes
-  (ppem 8 and 16), a de-duplicated glyph, and a 256px tall cell.
-- `SynthColour-alt.ttf` - font id `synth:alt`, reusing codepoint `U+E001` with different
-  artwork to exercise per-`font_id` PUA disambiguation.
+- `SynthColour.ttf` - ONE merged `sbix` TrueType carrying both font ids (`synth:demo` and
+  `synth:alt`). It has two strikes (ppem 8 and 16), a de-duplicated glyph, a 256px tall cell,
+  and it reuses codepoint `U+E001` across the two font ids with different artwork - resolved by
+  giving each `(font_id, U+E001)` pair its own stored codepoint from plane 15. `synth:alt` sorts
+  first, so its glyph is gid 1 and `synth:demo`'s glyphs follow at gids 2..6.
 - `SynthColour-edge.ttf` - a four-glyph font with a `dupe` record and a non-`png ` record
   to exercise the `sbix` reader edge paths.
-- `colour-glyphs.json` - the versioned sidecar (schema v1) covering both font ids, with
-  raster rows (signed advance, origin, strike ppem) and space-provider rows (negative and
-  fractional advances).
+- `colour-glyphs.json` - the versioned single-file sidecar (schema v2): one top-level `file`
+  reference, and per-glyph raster rows (original codepoint, stored codepoint, gid, signed advance,
+  origin, strike ppem) plus space-provider rows (negative and fractional advances).
 
 ## Regenerating
 
