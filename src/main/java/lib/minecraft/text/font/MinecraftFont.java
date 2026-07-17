@@ -325,18 +325,64 @@ public enum MinecraftFont {
     /**
      * Rasterized glyph data: the bitmap pixels and positioning metrics needed to blit the
      * glyph at the correct location relative to the text cursor.
+     * <p>
+     * Vanilla glyphs are monochrome white-on-transparent bitmaps that the draw path tints by
+     * multiplying alpha with a target colour, and their {@link #signedAdvance} equals the integer
+     * {@link #advanceWidth}. Colour (pack {@code sbix}) glyphs set {@link #color} - their bitmap
+     * carries its own RGBA and must be blitted natively without tinting - and may carry a
+     * fractional/negative {@link #signedAdvance} and a non-zero origin sourced from the sidecar.
+     * <p>
+     * The four-argument constructor produces a monochrome glyph and is the only form the vanilla
+     * rasterizer uses, so the mono path is unchanged byte-for-byte.
      *
-     * @param bitmap the glyph pixels (white-on-transparent)
-     * @param advanceWidth the horizontal cursor advance after this glyph
+     * @param bitmap the glyph pixels (white-on-transparent for mono, native RGBA for colour)
+     * @param advanceWidth the integer horizontal cursor advance after this glyph, in output pixels
      * @param bearingX the left bearing - horizontal offset from cursor to left edge of bitmap
      * @param bearingY the top bearing - vertical offset from baseline to top edge of bitmap
+     * @param color whether the bitmap is native colour artwork (never tinted) rather than mono
+     * @param signedAdvance the signed, possibly fractional advance in output pixels; equals
+     * {@link #advanceWidth} for mono glyphs
+     * @param originX the glyph origin X offset in output pixels (0 for mono glyphs)
+     * @param originY the glyph origin Y offset in output pixels (0 for mono glyphs)
      */
     public record GlyphData(
         @NotNull PixelBuffer bitmap,
         int advanceWidth,
         int bearingX,
-        int bearingY
-    ) {}
+        int bearingY,
+        boolean color,
+        float signedAdvance,
+        int originX,
+        int originY
+    ) {
+
+        /**
+         * Constructs a monochrome glyph: {@code color = false}, {@code signedAdvance = advanceWidth},
+         * and a zero origin. This is the vanilla rasterization form.
+         *
+         * @param bitmap the white-on-transparent glyph pixels
+         * @param advanceWidth the integer horizontal cursor advance
+         * @param bearingX the left bearing
+         * @param bearingY the top bearing
+         */
+        public GlyphData(@NotNull PixelBuffer bitmap, int advanceWidth, int bearingX, int bearingY) {
+            this(bitmap, advanceWidth, bearingX, bearingY, false, advanceWidth, 0, 0);
+        }
+
+        /**
+         * Constructs a colour glyph from a native RGBA bitmap and sidecar-sourced positioning.
+         *
+         * @param bitmap the native RGBA artwork
+         * @param signedAdvance the signed, possibly fractional advance in output pixels
+         * @param originX the origin X offset in output pixels
+         * @param originY the origin Y offset in output pixels
+         * @return the colour glyph data
+         */
+        public static @NotNull GlyphData color(@NotNull PixelBuffer bitmap, float signedAdvance, int originX, int originY) {
+            return new GlyphData(bitmap, Math.round(signedAdvance), originX, originY, true, signedAdvance, originX, originY);
+        }
+
+    }
 
     /**
      * The style category a {@link MinecraftFont} entry belongs to.
