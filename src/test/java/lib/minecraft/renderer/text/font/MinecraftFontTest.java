@@ -23,59 +23,59 @@ class MinecraftFontTest {
     @Test
     @DisplayName("REGULAR loads Minecraft-Regular.otf")
     void regularResolves() {
-        assertThat(MinecraftFont.REGULAR.getActual(), notNullValue());
-        assertThat(MinecraftFont.REGULAR.getStyle(), equalTo(MinecraftFont.Style.REGULAR));;
+        assertThat(MinecraftFont.Vanilla.REGULAR.getActual(), notNullValue());
+        assertThat(MinecraftFont.Vanilla.REGULAR.getStyle(), equalTo(MinecraftFont.Style.REGULAR));;
     }
 
     @Test
     @DisplayName("BOLD loads Minecraft-Bold.otf")
     void boldResolves() {
-        assertThat(MinecraftFont.BOLD.getActual(), notNullValue());
-        assertThat(MinecraftFont.BOLD.getStyle(), equalTo(MinecraftFont.Style.BOLD));
+        assertThat(MinecraftFont.Vanilla.BOLD.getActual(), notNullValue());
+        assertThat(MinecraftFont.Vanilla.BOLD.getStyle(), equalTo(MinecraftFont.Style.BOLD));
     }
 
     @Test
     @DisplayName("ITALIC loads Minecraft-Italic.otf")
     void italicResolves() {
-        assertThat(MinecraftFont.ITALIC.getActual(), notNullValue());
-        assertThat(MinecraftFont.ITALIC.getStyle(), equalTo(MinecraftFont.Style.ITALIC));
+        assertThat(MinecraftFont.Vanilla.ITALIC.getActual(), notNullValue());
+        assertThat(MinecraftFont.Vanilla.ITALIC.getStyle(), equalTo(MinecraftFont.Style.ITALIC));
     }
 
     @Test
     @DisplayName("BOLD_ITALIC loads Minecraft-BoldItalic.otf")
     void boldItalicResolves() {
-        assertThat(MinecraftFont.BOLD_ITALIC.getActual(), notNullValue());
-        assertThat(MinecraftFont.BOLD_ITALIC.getStyle(), equalTo(MinecraftFont.Style.BOLD_ITALIC));
+        assertThat(MinecraftFont.Vanilla.BOLD_ITALIC.getActual(), notNullValue());
+        assertThat(MinecraftFont.Vanilla.BOLD_ITALIC.getStyle(), equalTo(MinecraftFont.Style.BOLD_ITALIC));
     }
 
     @Test
     @DisplayName("GALACTIC loads Minecraft-Galactic.otf (Standard Galactic Alphabet)")
     void galacticResolves() {
-        assertThat(MinecraftFont.GALACTIC.getActual(), notNullValue());
-        assertThat(MinecraftFont.GALACTIC.getStyle(), equalTo(MinecraftFont.Style.GALACTIC));
+        assertThat(MinecraftFont.Vanilla.GALACTIC.getActual(), notNullValue());
+        assertThat(MinecraftFont.Vanilla.GALACTIC.getStyle(), equalTo(MinecraftFont.Style.GALACTIC));
     }
 
     @Test
     @DisplayName("ILLAGERALT loads Minecraft-Illageralt.otf")
     void illageraltResolves() {
-        assertThat(MinecraftFont.ILLAGERALT.getActual(), notNullValue());
-        assertThat(MinecraftFont.ILLAGERALT.getStyle(), equalTo(MinecraftFont.Style.ILLAGERALT));
+        assertThat(MinecraftFont.Vanilla.ILLAGERALT.getActual(), notNullValue());
+        assertThat(MinecraftFont.Vanilla.ILLAGERALT.getStyle(), equalTo(MinecraftFont.Style.ILLAGERALT));
     }
 
     @Test
     @DisplayName("of(style) returns the matching enum value for typographical styles")
     void ofStyleReturnsMatchingTypographicStyles() {
-        assertThat(MinecraftFont.of(MinecraftFont.Style.REGULAR), equalTo(MinecraftFont.REGULAR));
-        assertThat(MinecraftFont.of(MinecraftFont.Style.BOLD), equalTo(MinecraftFont.BOLD));
-        assertThat(MinecraftFont.of(MinecraftFont.Style.ITALIC), equalTo(MinecraftFont.ITALIC));
-        assertThat(MinecraftFont.of(MinecraftFont.Style.BOLD_ITALIC), equalTo(MinecraftFont.BOLD_ITALIC));
+        assertThat(MinecraftFont.Vanilla.of(MinecraftFont.Style.REGULAR), equalTo(MinecraftFont.Vanilla.REGULAR));
+        assertThat(MinecraftFont.Vanilla.of(MinecraftFont.Style.BOLD), equalTo(MinecraftFont.Vanilla.BOLD));
+        assertThat(MinecraftFont.Vanilla.of(MinecraftFont.Style.ITALIC), equalTo(MinecraftFont.Vanilla.ITALIC));
+        assertThat(MinecraftFont.Vanilla.of(MinecraftFont.Style.BOLD_ITALIC), equalTo(MinecraftFont.Vanilla.BOLD_ITALIC));
     }
 
     @Test
     @DisplayName("of(style) returns the matching enum value for alternate-script styles")
     void ofStyleReturnsMatchingScriptStyles() {
-        assertThat(MinecraftFont.of(MinecraftFont.Style.GALACTIC), equalTo(MinecraftFont.GALACTIC));
-        assertThat(MinecraftFont.of(MinecraftFont.Style.ILLAGERALT), equalTo(MinecraftFont.ILLAGERALT));
+        assertThat(MinecraftFont.Vanilla.of(MinecraftFont.Style.GALACTIC), equalTo(MinecraftFont.Vanilla.GALACTIC));
+        assertThat(MinecraftFont.Vanilla.of(MinecraftFont.Style.ILLAGERALT), equalTo(MinecraftFont.Vanilla.ILLAGERALT));
     }
 
     @Test
@@ -99,9 +99,9 @@ class MinecraftFontTest {
     @Test
     @DisplayName("getPath() returns a real file ending in the expected .otf name")
     void pathIsSet() {
-        assertThat(MinecraftFont.REGULAR.getPath(), notNullValue());
-        assertThat(Files.isRegularFile(MinecraftFont.REGULAR.getPath()), is(true));
-        assertThat(MinecraftFont.REGULAR.getPath().toString(), endsWith("Minecraft-Regular.otf"));
+        assertThat(MinecraftFont.Vanilla.REGULAR.getPath(), notNullValue());
+        assertThat(Files.isRegularFile(MinecraftFont.Vanilla.REGULAR.getPath()), is(true));
+        assertThat(MinecraftFont.Vanilla.REGULAR.getPath().toString(), endsWith("Minecraft-Regular.otf"));
     }
 
 }

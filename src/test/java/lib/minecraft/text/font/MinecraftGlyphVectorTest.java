@@ -9,7 +9,6 @@ import java.awt.Font;
 import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphVector;
 import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
 import java.io.StringReader;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -41,7 +40,7 @@ class MinecraftGlyphVectorTest {
     }
 
     @Test
-    @DisplayName("measure equals draw: ColorFontMetrics.stringAdvanceX == MinecraftGlyphVector.advanceX")
+    @DisplayName("measure equals draw: MinecraftFontMetrics.stringAdvanceX == MinecraftGlyphVector.advanceX")
     void measureEqualsDraw() {
         MinecraftColorFont font = ColorFontFixtures.demoFont();
         String text = cp(ColorFontFixtures.CP_FLAT) + cp(ColorFontFixtures.CP_FRAC_SPACE) + cp(ColorFontFixtures.CP_DOWNSCALED);
@@ -62,10 +61,10 @@ class MinecraftGlyphVectorTest {
         MinecraftGraphics graphics = new MinecraftGraphics(target);
         vector.paint(graphics, 0, 0, Color.RED);
 
-        BufferedImage source = font.strikes().strike(1, 8).orElseThrow();
+        PixelBuffer source = font.strike(1, 8).orElseThrow();
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++)
-                assertThat("pixel (" + x + "," + y + ")", target.getPixel(x, y), is(source.getRGB(x, y)));
+                assertThat("pixel (" + x + "," + y + ")", target.getPixel(x, y), is(source.getPixel(x, y)));
     }
 
     @Test
@@ -86,7 +85,7 @@ class MinecraftGlyphVectorTest {
             }
             """));
         MinecraftColorFont font = MinecraftColorFont.of(ColorFontFixtures.DEMO,
-            SbixStrikeCache.of(ColorFontFixtures.bytes("SynthColour-demo.ttf")), sidecar, MinecraftFont.REGULAR);
+            ColorFontFixtures.bytes("SynthColour-demo.ttf"), sidecar, MinecraftFont.Vanilla.REGULAR);
 
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
         MinecraftGlyphVector.PositionedGlyph glyph = vector.positionedGlyph(0);
@@ -129,7 +128,7 @@ class MinecraftGlyphVectorTest {
         assertThat(vector.positionedGlyph(1).kind(), is(MinecraftGlyphVector.Kind.SPACE));
         assertThat(vector.positionedGlyph(1).advance(), is(-16.0));
         assertThat(vector.positionedGlyph(2).penX(), is(0.0));   // 16 + (-16) back to origin
-        assertTrue(vector.positionedGlyph(1).glyph() == null);
+        assertThat(vector.positionedGlyph(1).glyph().kind(), is(MinecraftGlyphVector.Kind.SPACE));   // SPACE sentinel, not null
         assertThat(vector.advanceX(), is(16.0));
     }
 
@@ -154,7 +153,7 @@ class MinecraftGlyphVectorTest {
         MinecraftGlyphVector.PositionedGlyph glyph = vector.positionedGlyph(0);
         assertThat(glyph.kind(), is(MinecraftGlyphVector.Kind.MONO));
         assertThat(glyph.glyph().color(), is(false));
-        assertThat(glyph.advance(), is((double) MinecraftFont.REGULAR.glyph('A').advanceWidth()));
+        assertThat(glyph.advance(), is((double) MinecraftFont.Vanilla.REGULAR.glyph('A').advanceWidth()));
     }
 
     @Test
@@ -163,12 +162,12 @@ class MinecraftGlyphVectorTest {
         MinecraftColorFont demo = ColorFontFixtures.demoFont();
         MinecraftColorFont alt = ColorFontFixtures.altFont();
 
-        BufferedImage demoStrike = demo.strikes().strike(1, 8).orElseThrow();
-        BufferedImage altStrike = alt.strikes().strike(1, 8).orElseThrow();
+        PixelBuffer demoStrike = demo.strike(1, 8).orElseThrow();
+        PixelBuffer altStrike = alt.strike(1, 8).orElseThrow();
 
-        assertThat(demoStrike.getRGB(0, 0), is(0xFFDC2828));   // demo E001 top-left red
-        assertThat(altStrike.getRGB(0, 0), is(0xFF28C83C));    // alt E001 top-left green (40,200,60)
-        assertFalse(demoStrike.getRGB(0, 0) == altStrike.getRGB(0, 0));
+        assertThat(demoStrike.getPixel(0, 0), is(0xFFDC2828));   // demo E001 top-left red
+        assertThat(altStrike.getPixel(0, 0), is(0xFF28C83C));    // alt E001 top-left green (40,200,60)
+        assertFalse(demoStrike.getPixel(0, 0) == altStrike.getPixel(0, 0));
     }
 
     @Test
@@ -182,7 +181,7 @@ class MinecraftGlyphVectorTest {
         assertThat(downscaled.positionedGlyph(0).strikePpem(), is(16));
 
         // The ppem-16 strike carries the downscaled art (top-left red 200,30,30).
-        assertThat(font.strikes().strike(4, 16).orElseThrow().getRGB(0, 0), is(0xFFC81E1E));
+        assertThat(font.strike(4, 16).orElseThrow().getPixel(0, 0), is(0xFFC81E1E));
     }
 
     @Test

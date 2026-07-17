@@ -24,7 +24,7 @@ class ColorFontConformanceTest {
 
     @AfterEach
     void tearDown() {
-        PackColorFonts.clear();
+        MinecraftFont.clear();
     }
 
     @Test
@@ -33,7 +33,7 @@ class ColorFontConformanceTest {
         MinecraftColorFont font = MinecraftColorFont.load(ColorFontFixtures.DEMO);
         assertThat(font.fontId(), is(ColorFontFixtures.DEMO));
         assertThat(font.sidecar().unitsPerEm(), is(1024));
-        assertThat(font.strikes().reader().numGlyphs(), is(6));
+        assertThat(font.reader().numGlyphs(), is(6));
     }
 
     @Test
@@ -45,34 +45,34 @@ class ColorFontConformanceTest {
     }
 
     @Test
-    @DisplayName("PackColorFonts registers and returns the same instance per font id")
+    @DisplayName("the MinecraftFont registry registers and returns the same instance per font id")
     void registryStoresByFontId() {
         MinecraftColorFont font = ColorFontFixtures.demoFont();
-        PackColorFonts.register(font);
-        assertThat(PackColorFonts.get(ColorFontFixtures.DEMO).orElseThrow(), sameInstance(font));
+        MinecraftFont.register(font);
+        assertThat(MinecraftFont.get(ColorFontFixtures.DEMO).orElseThrow(), sameInstance(font));
 
-        PackColorFonts.unregister(ColorFontFixtures.DEMO);
-        assertThat(PackColorFonts.get(ColorFontFixtures.DEMO).isPresent(), is(false));
+        MinecraftFont.unregister(ColorFontFixtures.DEMO);
+        assertThat(MinecraftFont.get(ColorFontFixtures.DEMO).isPresent(), is(false));
     }
 
     @Test
     @DisplayName("getOrLoad resolves once and caches the registration")
     void getOrLoadCaches() {
-        MinecraftColorFont first = PackColorFonts.getOrLoad(ColorFontFixtures.DEMO);
-        MinecraftColorFont second = PackColorFonts.getOrLoad(ColorFontFixtures.DEMO);
+        MinecraftFont first = MinecraftFont.getOrLoad(ColorFontFixtures.DEMO);
+        MinecraftFont second = MinecraftFont.getOrLoad(ColorFontFixtures.DEMO);
         assertThat(second, sameInstance(first));
     }
 
     @Test
-    @DisplayName("a mixed run measures through ColorFontMetrics.charWidth and paints native colours")
+    @DisplayName("a mixed run measures through the unified metrics and paints native colours")
     void mixedRunConformance() {
-        MinecraftColorFont font = PackColorFonts.getOrLoad(ColorFontFixtures.DEMO);
+        MinecraftFont font = MinecraftFont.getOrLoad(ColorFontFixtures.DEMO);
         String text = new String(Character.toChars(ColorFontFixtures.CP_FLAT))
             + new String(Character.toChars(ColorFontFixtures.CP_NEG_SPACE))
             + new String(Character.toChars(ColorFontFixtures.CP_DOWNSCALED));
 
-        // Exercise the MinecraftFontMetrics factory entry point.
-        MinecraftGlyphVector vector = MinecraftFont.REGULAR.getFontMetrics().colorGlyphVector(font, text);
+        // The one layout entry point, shared with the vanilla path.
+        MinecraftGlyphVector vector = font.layout(text);
 
         // advances: 16 (flat) - 16 (neg space) + 8 (downscaled) = 8
         assertThat(vector.advanceX(), closeTo(8.0, 1e-9));

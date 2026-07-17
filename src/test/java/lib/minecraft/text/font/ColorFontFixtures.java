@@ -60,11 +60,11 @@ final class ColorFontFixtures {
     }
 
     static @NotNull MinecraftColorFont demoFont() {
-        return MinecraftColorFont.of(DEMO, SbixStrikeCache.of(bytes("SynthColour-demo.ttf")), sidecar(), MinecraftFont.REGULAR);
+        return MinecraftColorFont.of(DEMO, bytes("SynthColour-demo.ttf"), sidecar(), MinecraftFont.Vanilla.REGULAR);
     }
 
     static @NotNull MinecraftColorFont altFont() {
-        return MinecraftColorFont.of(ALT, SbixStrikeCache.of(bytes("SynthColour-alt.ttf")), sidecar(), MinecraftFont.REGULAR);
+        return MinecraftColorFont.of(ALT, bytes("SynthColour-alt.ttf"), sidecar(), MinecraftFont.Vanilla.REGULAR);
     }
 
 }

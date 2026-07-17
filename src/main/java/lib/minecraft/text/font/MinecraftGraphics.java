@@ -33,7 +33,7 @@ public class MinecraftGraphics extends PixelGraphics {
      */
     public MinecraftGraphics(@NotNull PixelBuffer target) {
         super(target);
-        this.currentMcFont = MinecraftFont.REGULAR;
+        this.currentMcFont = MinecraftFont.Vanilla.REGULAR;
     }
 
     private MinecraftGraphics(@NotNull MinecraftGraphics source) {
@@ -55,17 +55,7 @@ public class MinecraftGraphics extends PixelGraphics {
     @Override
     public void drawString(@NotNull String str, int xMcPx, int yMcPx) {
         if (str.isEmpty()) return;
-        int pxPerMcPx = MinecraftFont.MC_PIXEL_SCALE;
-        int cx = translateX() + xMcPx * pxPerMcPx;
-        int cy = translateY() + yMcPx * pxPerMcPx;
-
-        int argb = colorArgb();
-        for (int i = 0; i < str.length(); i++) {
-            int cp = str.charAt(i);
-            MinecraftFont.GlyphData glyph = this.currentMcFont.glyph(cp);
-            blitGlyph(glyph, cx, cy, argb);
-            cx += glyph.advanceWidth();
-        }
+        this.currentMcFont.layout(str).paint(this, xMcPx, yMcPx, getColor());
     }
 
     /**
@@ -82,6 +72,7 @@ public class MinecraftGraphics extends PixelGraphics {
      * @param tintArgb the tint applied to monochrome glyphs (ignored for colour glyphs)
      */
     void blitGlyph(@NotNull MinecraftFont.GlyphData glyph, int x, int y, int tintArgb) {
+        if (glyph.kind() == MinecraftGlyphVector.Kind.SPACE) return;   // advance-only sentinel, paints nothing
         PixelBuffer bitmap = glyph.bitmap();
         int bw = bitmap.width();
         int bh = bitmap.height();
@@ -154,8 +145,8 @@ public class MinecraftGraphics extends PixelGraphics {
         for (int i = 0; i < vector.glyphCount(); i++) {
             MinecraftGlyphVector.PositionedGlyph positioned = vector.positionedGlyph(i);
             MinecraftFont.GlyphData glyph = positioned.glyph();
-            if (glyph == null) continue;   // space glyph or a strike that failed to decode
-            blitGlyph(glyph, cx + (int) Math.round(positioned.penX()), cy, fillArgb);
+            if (glyph == null) continue;   // defensive: glyph() is non-null in practice (SPACE is a sentinel)
+            blitGlyph(glyph, cx + (int) Math.round(positioned.penX()), cy, fillArgb);   // blitGlyph no-ops on SPACE
         }
     }
 
@@ -167,7 +158,7 @@ public class MinecraftGraphics extends PixelGraphics {
      * Custom-loaded OTF fonts always report {@link Font#PLAIN} from {@link Font#getStyle()}
      * because AWT does not introspect the typeface file - style is whatever was set with
      * {@code deriveFont(style)} (never, for us). Going through {@link #setFont(Font)} would
-     * therefore always resolve to {@link MinecraftFont#REGULAR}. Callers that already know
+     * therefore always resolve to {@link MinecraftFont.Vanilla#REGULAR}. Callers that already know
      * which variant they want (e.g. the text pipeline picking BOLD from a
      * {@link lib.minecraft.text.ColorSegment}'s {@code &l} flag) should use this method
      * instead.
@@ -180,22 +171,22 @@ public class MinecraftGraphics extends PixelGraphics {
 
     @Override
     public void setFont(@NotNull Font font) {
-        this.currentMcFont = MinecraftFont.of(MinecraftFont.Style.of(font.getStyle()));
+        this.currentMcFont = MinecraftFont.Vanilla.of(MinecraftFont.Style.of(font.getStyle()));
     }
 
     @Override
     public @NotNull Font getFont() {
-        return this.currentMcFont.getActual();
+        return this.currentMcFont.metrics().getFont();
     }
 
     @Override
     public @NotNull FontMetrics getFontMetrics(@NotNull Font f) {
-        return MinecraftFont.of(MinecraftFont.Style.of(f.getStyle())).getFontMetrics();
+        return MinecraftFont.Vanilla.of(MinecraftFont.Style.of(f.getStyle())).metrics();
     }
 
     @Override
     public @NotNull FontMetrics getFontMetrics() {
-        return this.currentMcFont.getFontMetrics();
+        return this.currentMcFont.metrics();
     }
 
     // --- copy ---

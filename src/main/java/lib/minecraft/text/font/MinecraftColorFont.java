@@ -1,7 +1,12 @@
 package lib.minecraft.text.font;
 
+import dev.simplified.collection.Concurrent;
+import dev.simplified.collection.ConcurrentMap;
+import dev.simplified.image.pixel.PixelBuffer;
 import org.jetbrains.annotations.NotNull;
 
+import java.awt.Shape;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -10,18 +15,20 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
- * A single pack colour font, keyed by {@link FontId}, that coexists with the fixed vanilla
- * {@link MinecraftFont} enum rather than extending it.
+ * A single pack colour font, keyed by {@link FontId}, that sits beside the fixed
+ * {@link MinecraftFont.Vanilla} enum as the second {@link MinecraftFont} implementation.
  * <p>
- * It binds the three things a colour font needs at draw time: the {@link SbixStrikeCache} over its
+ * It binds the three things a colour font needs at draw time: an {@code sbix} strike cache over its
  * per-font {@code .ttf}, the parsed {@link ColorGlyphSidecar} view (advances, origins, strike
  * selection), and a vanilla {@link MinecraftFont} mono fallback for any codepoint the pack does not
- * define. Layout and paint go through {@link MinecraftGlyphVector}; measurement goes through
- * {@link ColorFontMetrics} - both share one advance source so measure equals draw.
+ * define. Every codepoint resolves through {@link #glyph(int)} into a single {@link GlyphData}, so
+ * downstream layout ({@link #layout(String)}), measurement ({@link #metrics()}), and painting share
+ * one advance source and one glyph surface with the vanilla path.
  */
-public final class MinecraftColorFont {
+public final class MinecraftColorFont implements MinecraftFont {
 
     /**
      * Classpath / cache subdirectory the colour {@code .ttf} files and shared sidecar live under.
@@ -37,7 +44,13 @@ public final class MinecraftColorFont {
     private final @NotNull SbixStrikeCache strikes;
     private final @NotNull ColorGlyphSidecar sidecar;
     private final @NotNull MinecraftFont monoFallback;
-    private final @NotNull ColorFontMetrics metrics;
+    private final @NotNull MinecraftFontMetrics metrics;
+
+    /**
+     * Per-codepoint glyph cache. Uniform {@link #glyph(int)} surface with the vanilla atlas over a
+     * lower {@code sbix} strike tier.
+     */
+    private final @NotNull ConcurrentMap<Integer, GlyphData> glyphCache;
 
     private MinecraftColorFont(
         @NotNull FontId fontId,
@@ -49,42 +62,41 @@ public final class MinecraftColorFont {
         this.strikes = strikes;
         this.sidecar = sidecar;
         this.monoFallback = monoFallback;
-        this.metrics = new ColorFontMetrics(fontId, sidecar, monoFallback);
+        this.glyphCache = Concurrent.newMap();
+
+        MinecraftFontMetrics mono = monoFallback.metrics();
+        this.metrics = MinecraftFontMetrics.of(this, mono.getFont(), mono.getAscent(), mono.getDescent(), mono.getHeight());
     }
 
     /**
-     * Builds a colour font from explicit parts. The primary constructor for callers that already
-     * hold the strike cache and parsed sidecar (e.g. a pack loader or a test fixture).
+     * Builds a colour font from raw font bytes, the parsed sidecar, and a mono fallback. The strike
+     * cache is internal, so callers pass only the {@code .ttf} bytes.
      *
      * @param fontId the font id
-     * @param strikes the strike cache over this font's {@code .ttf}
+     * @param ttf the raw colour {@code .ttf} bytes
      * @param sidecar the parsed sidecar (may span multiple font ids)
      * @param monoFallback the vanilla font used for codepoints the pack does not define
      * @return the colour font
      */
     public static @NotNull MinecraftColorFont of(
         @NotNull FontId fontId,
-        @NotNull SbixStrikeCache strikes,
+        byte @NotNull [] ttf,
         @NotNull ColorGlyphSidecar sidecar,
         @NotNull MinecraftFont monoFallback
     ) {
-        return new MinecraftColorFont(fontId, strikes, sidecar, monoFallback);
+        return new MinecraftColorFont(fontId, SbixStrikeCache.of(ttf), sidecar, monoFallback);
     }
 
     /**
      * Resolves a colour font for a font id from the classpath, then the user-home cache, using
-     * {@link MinecraftFont#REGULAR} as the mono fallback.
-     * <p>
-     * The shared {@code colour-glyphs.json} sidecar is read first (it names the per-font-id
-     * {@code .ttf} file), then that {@code .ttf} is loaded. On a miss the failure names every path
-     * that was tried, mirroring {@link MinecraftFont}'s fail-loud bootstrap message.
+     * {@link Vanilla#REGULAR} as the mono fallback.
      *
      * @param fontId the font id to load
      * @return the resolved colour font
      * @throws IllegalStateException when the sidecar, the font id, or its {@code .ttf} cannot be found
      */
     public static @NotNull MinecraftColorFont load(@NotNull FontId fontId) {
-        return load(fontId, MinecraftFont.REGULAR);
+        return load(fontId, Vanilla.REGULAR);
     }
 
     /**
@@ -99,8 +111,7 @@ public final class MinecraftColorFont {
         ColorGlyphSidecar sidecar = loadSidecar();
         String file = sidecar.fileFor(fontId).orElseThrow(() -> new IllegalStateException(
             "Colour sidecar '" + SIDECAR_NAME + "' does not list font id '" + fontId + "'."));
-        SbixStrikeCache strikes = SbixStrikeCache.of(loadTtfBytes(file));
-        return of(fontId, strikes, sidecar, monoFallback);
+        return of(fontId, loadTtfBytes(file), sidecar, monoFallback);
     }
 
     private static @NotNull ColorGlyphSidecar loadSidecar() {
@@ -153,28 +164,71 @@ public final class MinecraftColorFont {
                 + "  Tier 2 (filesystem cache): " + cached);
     }
 
-    /**
-     * Lays out a run of text into a positioned colour glyph vector.
-     *
-     * @param text the text to lay out
-     * @return the glyph vector
-     */
-    public @NotNull MinecraftGlyphVector layout(@NotNull String text) {
-        return MinecraftGlyphVector.layout(this, text);
+    @Override
+    public @NotNull GlyphData glyph(int codepoint) {
+        return this.glyphCache.computeIfAbsent(codepoint, this::resolveGlyph);
+    }
+
+    private @NotNull GlyphData resolveGlyph(int codepoint) {
+        Optional<GlyphRow> rowOptional = this.sidecar.lookup(this.fontId, codepoint);
+        if (rowOptional.isEmpty()) return this.monoFallback.glyph(codepoint);   // MONO fallback
+
+        GlyphRow row = rowOptional.get();
+        int unitsPerEm = this.sidecar.unitsPerEm();
+        float advance = (float) FontUnits.toOutputPixels(row.advance(), unitsPerEm);
+        if (row.isSpace()) return GlyphData.space(advance);
+
+        int ppem = resolvePpem(row);
+        int gid = row.gid();
+        int originX = (int) Math.round(FontUnits.toOutputPixels(row.originX(), unitsPerEm));
+        int originY = (int) Math.round(FontUnits.toOutputPixels(row.originY(), unitsPerEm));
+
+        // A raster row whose strike fails to decode degrades to an advance-only sentinel: the pen
+        // still moves, nothing is painted, and glyph(cp) never returns null.
+        return strike(gid, ppem)
+            .map(bitmap -> GlyphData.color(bitmap, advance, originX, originY, gid, ppem))
+            .orElseGet(() -> GlyphData.space(advance));
+    }
+
+    private int resolvePpem(@NotNull GlyphRow row) {
+        Integer declared = row.strikePpem();
+        if (declared != null) return declared;
+        int[] available = this.strikes.reader().strikePpems();
+        return available.length > 0 ? available[0] : 0;
     }
 
     /**
-     * @return the font id
+     * Returns the decoded {@code sbix} strike for a glyph as a {@link PixelBuffer}, or empty when the
+     * glyph is absent in that strike or its graphic type is not a PNG.
+     *
+     * @param gid the glyph id
+     * @param ppem the strike ppem
+     * @return the decoded strike, or empty
      */
+    @NotNull Optional<PixelBuffer> strike(int gid, int ppem) {
+        return this.strikes.strike(gid, ppem).map(image -> PixelBuffer.wrap(toArgb(image)));
+    }
+
+    @Override
+    public @NotNull MinecraftFontMetrics metrics() {
+        return this.metrics;
+    }
+
+    @Override
     public @NotNull FontId fontId() {
         return this.fontId;
     }
 
+    @Override
+    public @NotNull Optional<Shape> monoOutline(int codepoint, double penX) {
+        return this.monoFallback.monoOutline(codepoint, penX);
+    }
+
     /**
-     * @return the strike cache
+     * @return the underlying {@code sbix} reader
      */
-    public @NotNull SbixStrikeCache strikes() {
-        return this.strikes;
+    @NotNull SbixReader reader() {
+        return this.strikes.reader();
     }
 
     /**
@@ -191,11 +245,11 @@ public final class MinecraftColorFont {
         return this.monoFallback;
     }
 
-    /**
-     * @return the advance/line metrics
-     */
-    public @NotNull ColorFontMetrics metrics() {
-        return this.metrics;
+    private static @NotNull BufferedImage toArgb(@NotNull BufferedImage source) {
+        if (source.getType() == BufferedImage.TYPE_INT_ARGB) return source;
+        BufferedImage argb = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        argb.getGraphics().drawImage(source, 0, 0, null);
+        return argb;
     }
 
 }
