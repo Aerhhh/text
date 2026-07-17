@@ -17,7 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * End-to-end conformance over the committed synthetic fixture: resolve a colour font through the
  * classpath loader, register it, lay out a mixed run, and assert advances, strike selection, native
- * (untinted) colours, and the {@code FontMetrics.stringWidth} flow-through.
+ * (untinted) colours, and the {@code FontMetrics.stringWidth} flow-through. Two assertions pin the
+ * single-file bridge specifically: the same original codepoint resolves to different native art
+ * under two font ids through the one merged {@code .ttf}, and two original codepoints that share a
+ * content-deduped gid resolve to one shared strike surface.
  */
 @DisplayName("Colour font end-to-end conformance over the committed fixture")
 class ColorFontConformanceTest {
@@ -61,6 +64,44 @@ class ColorFontConformanceTest {
         MinecraftFont first = MinecraftFont.getOrLoad(ColorFontFixtures.DEMO);
         MinecraftFont second = MinecraftFont.getOrLoad(ColorFontFixtures.DEMO);
         assertThat(second, sameInstance(first));
+    }
+
+    @Test
+    @DisplayName("the same PUA codepoint resolves to different native art per font id through the one merged file")
+    void puaDisambiguationThroughSingleFile() {
+        MinecraftColorFont demo = MinecraftColorFont.load(ColorFontFixtures.DEMO);
+        MinecraftColorFont alt = MinecraftColorFont.load(ColorFontFixtures.ALT);
+
+        // both font ids are served by the single merged .ttf named at the top level of the sidecar
+        assertThat(demo.sidecar().file().orElseThrow(), is(ColorFontFixtures.MERGED_TTF));
+        assertThat(alt.sidecar().file().orElseThrow(), is(ColorFontFixtures.MERGED_TTF));
+
+        MinecraftFont.GlyphData demoGlyph = demo.glyph(ColorFontFixtures.CP_FLAT);
+        MinecraftFont.GlyphData altGlyph = alt.glyph(ColorFontFixtures.CP_FLAT);
+
+        // one original codepoint (E001) bridges to distinct stored codepoints -> distinct merged gids
+        assertThat(demoGlyph.gid(), is(ColorFontFixtures.GID_FLAT));
+        assertThat(altGlyph.gid(), is(ColorFontFixtures.GID_ALT_FLAT));
+
+        // ...so the resolved native artwork differs even though the codepoint and file are identical
+        assertThat(demoGlyph.bitmap().getPixel(0, 0), is(0xFFDC2828));   // demo E001 top-left red
+        assertThat(altGlyph.bitmap().getPixel(0, 0), is(0xFF28C83C));    // alt E001 top-left green
+    }
+
+    @Test
+    @DisplayName("two original codepoints sharing a content-deduped gid resolve to one shared strike surface")
+    void dedupSharedGidResolvesSameArt() {
+        MinecraftColorFont font = MinecraftColorFont.load(ColorFontFixtures.DEMO);
+
+        MinecraftFont.GlyphData flat = font.glyph(ColorFontFixtures.CP_FLAT);
+        MinecraftFont.GlyphData dup = font.glyph(ColorFontFixtures.CP_FLAT_DUP);
+
+        // pack-wide content dedup collapsed the identical art of E001 and E003 onto one gid...
+        assertThat(flat.gid(), is(ColorFontFixtures.GID_FLAT));
+        assertThat(dup.gid(), is(ColorFontFixtures.GID_FLAT));
+
+        // ...and both original codepoints decode that gid to the same cached strike, so the art is one surface
+        assertThat(dup.bitmap(), sameInstance(flat.bitmap()));
     }
 
     @Test
