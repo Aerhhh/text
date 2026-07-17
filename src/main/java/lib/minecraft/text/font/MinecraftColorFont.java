@@ -17,19 +17,27 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 
 /**
  * A single pack colour font, keyed by {@link FontId}, that sits beside the fixed
  * {@link MinecraftFont.Vanilla} enum as the second {@link MinecraftFont} implementation.
  * <p>
- * It binds the three things a colour font needs at draw time: a private {@code sbix} strike cache
- * over its per-font {@code .ttf} (an {@link SbixReader} plus a decode-once
- * {@code (gid, ppem) -> PixelBuffer} map), the parsed {@link ColorGlyphSidecar} view (advances,
- * origins, strike selection), and a vanilla {@link MinecraftFont} mono fallback for any codepoint
- * the pack does not define. Every codepoint resolves through {@link #glyph(int)} into a single
- * {@link GlyphData}, so downstream layout ({@link #layout(String)}), measurement ({@link #metrics()}),
- * and painting share one advance source and one glyph surface with the vanilla path.
+ * It binds the three things a colour font needs at draw time: a {@code sbix} strike store
+ * over its {@code .ttf} (a {@link SbixReader} plus a decode-once {@code (gid, ppem) -> PixelBuffer}
+ * map), the parsed {@link ColorGlyphSidecar} view (advances, origins, strike selection), and a
+ * vanilla {@link MinecraftFont} mono fallback for any codepoint the pack does not define. Every
+ * codepoint resolves through {@link #glyph(int)} into a single {@link GlyphData}, so downstream
+ * layout ({@link #layout(String)}), measurement ({@link #metrics()}), and painting share one advance
+ * source and one glyph surface with the vanilla path.
+ * <p>
+ * The strike store is shared per FILE, not per font id (see {@link SharedStrikes}): with the single
+ * merged per-pack colour font every font id of a pack points at the same {@code .ttf} bytes, so one
+ * {@link SbixReader} and one strike cache back all of them rather than one copy per id. The
+ * per-codepoint {@link #glyphCache} stays private to each instance because its rows differ per font
+ * id.
  * <p>
  * Strikes are cached as {@link PixelBuffer} rather than {@link BufferedImage}: each strike is decoded
  * once via {@link ImageIO#read}, wrapped into an ARGB {@code int[]}, and the whole
@@ -49,37 +57,29 @@ public final class MinecraftColorFont implements MinecraftFont {
     public static final @NotNull String SIDECAR_NAME = "colour-glyphs.json";
 
     private final @NotNull FontId fontId;
-    private final @NotNull SbixReader reader;
+    private final @NotNull SharedStrikes strikes;
     private final @NotNull ColorGlyphSidecar sidecar;
     private final @NotNull MinecraftFont monoFallback;
     private final @NotNull MinecraftFontMetrics metrics;
 
     /**
      * Per-codepoint glyph cache. Uniform {@link #glyph(int)} surface with the vanilla atlas over a
-     * lower {@code sbix} strike tier.
+     * lower {@code sbix} strike tier. Stays private per instance - unlike the {@link #strikes} store,
+     * the resolved rows differ per font id.
      */
     private final @NotNull ConcurrentMap<Integer, GlyphData> glyphCache;
 
-    /**
-     * Decode-once {@code sbix} strike cache keyed {@code (gid << 16 | ppem)}. Each strike is decoded
-     * exactly once into a {@link PixelBuffer}; an empty glyph or non-PNG record caches an empty
-     * result so the miss is not re-attempted. Unbounded and process-lifetime - the glyph set per pack
-     * is finite - and it garbage-collects with the font.
-     */
-    private final @NotNull ConcurrentMap<Long, Optional<PixelBuffer>> strikeCache;
-
     private MinecraftColorFont(
         @NotNull FontId fontId,
-        @NotNull SbixReader reader,
+        @NotNull SharedStrikes strikes,
         @NotNull ColorGlyphSidecar sidecar,
         @NotNull MinecraftFont monoFallback
     ) {
         this.fontId = fontId;
-        this.reader = reader;
+        this.strikes = strikes;
         this.sidecar = sidecar;
         this.monoFallback = monoFallback;
         this.glyphCache = Concurrent.newMap();
-        this.strikeCache = Concurrent.newMap();
 
         MinecraftFontMetrics mono = monoFallback.metrics();
         this.metrics = MinecraftFontMetrics.of(this, mono.getFont(), mono.getAscent(), mono.getDescent(), mono.getHeight());
@@ -87,7 +87,8 @@ public final class MinecraftColorFont implements MinecraftFont {
 
     /**
      * Builds a colour font from raw font bytes, the parsed sidecar, and a mono fallback. The strike
-     * cache is internal, so callers pass only the {@code .ttf} bytes.
+     * store is internal, so callers pass only the {@code .ttf} bytes; the {@link SbixReader} and its
+     * strike cache are shared with any other font built from identical bytes (see {@link SharedStrikes}).
      *
      * @param fontId the font id
      * @param ttf the raw colour {@code .ttf} bytes
@@ -101,7 +102,7 @@ public final class MinecraftColorFont implements MinecraftFont {
         @NotNull ColorGlyphSidecar sidecar,
         @NotNull MinecraftFont monoFallback
     ) {
-        return new MinecraftColorFont(fontId, new SbixReader(ttf), sidecar, monoFallback);
+        return new MinecraftColorFont(fontId, SharedStrikes.forBytes(ttf), sidecar, monoFallback);
     }
 
     /**
@@ -210,35 +211,21 @@ public final class MinecraftColorFont implements MinecraftFont {
     private int resolvePpem(@NotNull GlyphRow row) {
         Integer declared = row.strikePpem();
         if (declared != null) return declared;
-        int[] available = this.reader.strikePpems();
+        int[] available = this.strikes.reader().strikePpems();
         return available.length > 0 ? available[0] : 0;
     }
 
     /**
      * Returns the decoded {@code sbix} strike for a glyph as a {@link PixelBuffer}, decoding at most
-     * once per {@code (gid, ppem)} and caching the result. Empty when the glyph is absent in that
-     * strike or its graphic type is not a PNG.
+     * once per {@code (gid, ppem)} and caching the result on the shared per-file store. Empty when the
+     * glyph is absent in that strike or its graphic type is not a PNG.
      *
      * @param gid the glyph id
      * @param ppem the strike ppem
      * @return the decoded strike, or empty
      */
     @NotNull Optional<PixelBuffer> strike(int gid, int ppem) {
-        long key = ((long) gid << 16) | (ppem & 0xFFFFL);
-        return this.strikeCache.computeIfAbsent(key, ignored -> decode(gid, ppem));
-    }
-
-    private @NotNull Optional<PixelBuffer> decode(int gid, int ppem) {
-        byte[] png = this.reader.strikePng(gid, ppem);
-        if (png == null) return Optional.empty();
-        try (InputStream in = new ByteArrayInputStream(png)) {
-            BufferedImage image = ImageIO.read(in);
-            if (image == null) return Optional.empty();
-            // Wrap into an ARGB int[] and drop the BufferedImage graph; the PixelBuffer is all we keep.
-            return Optional.of(PixelBuffer.wrap(toArgb(image)));
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Unable to decode sbix strike gid=" + gid + " ppem=" + ppem, ex);
-        }
+        return this.strikes.strike(gid, ppem);
     }
 
     @Override
@@ -257,10 +244,17 @@ public final class MinecraftColorFont implements MinecraftFont {
     }
 
     /**
-     * @return the underlying {@code sbix} reader
+     * @return the underlying {@code sbix} reader (shared per file)
      */
     @NotNull SbixReader reader() {
-        return this.reader;
+        return this.strikes.reader();
+    }
+
+    /**
+     * @return the shared per-file strike store backing this font
+     */
+    @NotNull SharedStrikes strikes() {
+        return this.strikes;
     }
 
     /**
@@ -277,11 +271,88 @@ public final class MinecraftColorFont implements MinecraftFont {
         return this.monoFallback;
     }
 
-    private static @NotNull BufferedImage toArgb(@NotNull BufferedImage source) {
-        if (source.getType() == BufferedImage.TYPE_INT_ARGB) return source;
-        BufferedImage argb = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
-        argb.getGraphics().drawImage(source, 0, 0, null);
-        return argb;
+    /**
+     * The {@code sbix} strike store shared across every {@link MinecraftColorFont} whose {@code .ttf}
+     * bytes are byte-for-byte identical - which, with the single merged per-pack colour font, is every
+     * font id of a pack. It owns the one {@link SbixReader} (holding the single ~2.8MB copy of the
+     * font bytes) and the decode-once {@code (gid << 16 | ppem) -> PixelBuffer} cache, so a reference
+     * pack's ~191 font ids share one reader and one set of decoded strikes instead of ~191 copies.
+     * <p>
+     * <strong>Identity key.</strong> Entries are keyed by a SHA-256 content hash of the {@code .ttf}
+     * bytes rather than a file path. {@link MinecraftColorFont#of} receives raw bytes with no path in
+     * hand (only {@link MinecraftColorFont#load} resolves a filename), so a content hash is the only
+     * identity available to both entry points, and it correctly folds together identical bytes whether
+     * they arrive from the classpath, the filesystem cache, or an in-memory caller.
+     * <p>
+     * <strong>Lifetime.</strong> Process-lifetime: {@link #BY_CONTENT} is never evicted. This mirrors
+     * the font {@link MinecraftFont.Registry}, which likewise holds pack fonts for the process lifetime,
+     * and it is safe without a reference count because content-hash keying makes reloading identical
+     * bytes an idempotent cache hit and a pack's glyph/strike set is finite. The strike cache itself is
+     * unbounded for the same reason: the decoded strike set per file is bounded by the font's glyphs.
+     */
+    static final class SharedStrikes {
+
+        private static final @NotNull ConcurrentMap<String, SharedStrikes> BY_CONTENT = Concurrent.newMap();
+
+        private final @NotNull SbixReader reader;
+        private final @NotNull ConcurrentMap<Long, Optional<PixelBuffer>> strikeCache;
+
+        private SharedStrikes(@NotNull SbixReader reader) {
+            this.reader = reader;
+            this.strikeCache = Concurrent.newMap();
+        }
+
+        /**
+         * Returns the shared store for the given font bytes, constructing (and parsing) a
+         * {@link SbixReader} exactly once per distinct byte content and reusing it thereafter.
+         *
+         * @param ttf the raw colour {@code .ttf} bytes
+         * @return the shared store keyed by the bytes' content hash
+         */
+        static @NotNull SharedStrikes forBytes(byte @NotNull [] ttf) {
+            return BY_CONTENT.computeIfAbsent(contentKey(ttf), ignored -> new SharedStrikes(new SbixReader(ttf)));
+        }
+
+        @NotNull SbixReader reader() {
+            return this.reader;
+        }
+
+        @NotNull Optional<PixelBuffer> strike(int gid, int ppem) {
+            long key = ((long) gid << 16) | (ppem & 0xFFFFL);
+            return this.strikeCache.computeIfAbsent(key, ignored -> decode(gid, ppem));
+        }
+
+        private @NotNull Optional<PixelBuffer> decode(int gid, int ppem) {
+            byte[] png = this.reader.strikePng(gid, ppem);
+            if (png == null) return Optional.empty();
+            try (InputStream in = new ByteArrayInputStream(png)) {
+                BufferedImage image = ImageIO.read(in);
+                if (image == null) return Optional.empty();
+                // Wrap into an ARGB int[] and drop the BufferedImage graph; the PixelBuffer is all we keep.
+                return Optional.of(PixelBuffer.wrap(toArgb(image)));
+            } catch (IOException ex) {
+                throw new UncheckedIOException("Unable to decode sbix strike gid=" + gid + " ppem=" + ppem, ex);
+            }
+        }
+
+        private static @NotNull String contentKey(byte @NotNull [] ttf) {
+            try {
+                byte[] digest = MessageDigest.getInstance("SHA-256").digest(ttf);
+                StringBuilder hex = new StringBuilder(digest.length * 2);
+                for (byte b : digest) hex.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+                return hex.toString();
+            } catch (NoSuchAlgorithmException ex) {
+                throw new IllegalStateException("SHA-256 is required to key the shared colour strike store", ex);
+            }
+        }
+
+        private static @NotNull BufferedImage toArgb(@NotNull BufferedImage source) {
+            if (source.getType() == BufferedImage.TYPE_INT_ARGB) return source;
+            BufferedImage argb = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            argb.getGraphics().drawImage(source, 0, 0, null);
+            return argb;
+        }
+
     }
 
 }
