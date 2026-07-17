@@ -70,21 +70,16 @@ public final class MinecraftFontMetrics extends FontMetrics {
     }
 
     /**
-     * The total signed advance of a string in output pixels, summed over its codepoints. Iterates by
-     * codepoint (not char) so supplementary-plane PUA glyphs measure correctly.
+     * The total signed advance of a string in output pixels. Drives {@link MinecraftFont#walk the same
+     * accumulation walk} the layout and draw paths use - with a {@link MinecraftFont.GlyphSink#NOOP
+     * no-op} sink, taking only its returned total - so measure equals draw by construction. The walk
+     * iterates by codepoint (not char) so supplementary-plane PUA glyphs measure correctly.
      *
      * @param text the text to measure
      * @return the total advance in output pixels
      */
     public double stringAdvanceX(@NotNull String text) {
-        double total = 0.0;
-        int i = 0;
-        while (i < text.length()) {
-            int cp = text.codePointAt(i);
-            total += advanceOf(cp);
-            i += Character.charCount(cp);
-        }
-        return total;
+        return this.mcFont.walk(text, MinecraftFont.GlyphSink.NOOP);
     }
 
     @Override

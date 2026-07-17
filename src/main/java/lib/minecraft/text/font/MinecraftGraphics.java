@@ -7,6 +7,7 @@ import dev.simplified.image.pixel.PixelGraphics;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
+import java.awt.font.GlyphVector;
 
 /**
  * A {@link PixelGraphics} subclass that renders {@link MinecraftFont} glyphs directly into a
@@ -55,7 +56,12 @@ public class MinecraftGraphics extends PixelGraphics {
     @Override
     public void drawString(@NotNull String str, int xMcPx, int yMcPx) {
         if (str.isEmpty()) return;
-        this.currentMcFont.layout(str).paint(this, xMcPx, yMcPx, getColor());
+        int pxPerMcPx = MinecraftFont.MC_PIXEL_SCALE;
+        int cx = translateX() + xMcPx * pxPerMcPx;
+        int cy = translateY() + yMcPx * pxPerMcPx;
+        int fillArgb = getColor().getRGB();
+        // Drive the shared advance walk directly - no MinecraftGlyphVector/list allocation on the hot path.
+        this.currentMcFont.walk(str, (glyph, penX) -> blitGlyph(glyph, cx + (int) Math.round(penX), cy, fillArgb));
     }
 
     /**
@@ -122,6 +128,30 @@ public class MinecraftGraphics extends PixelGraphics {
      */
     public void drawGlyphVector(@NotNull MinecraftGlyphVector vector, int xMcPx, int yMcPx) {
         drawGlyphVector(vector, xMcPx, yMcPx, getColor());
+    }
+
+    /**
+     * Draws a {@link GlyphVector} at the mcPixel run origin {@code (x, y)}, per the AWT
+     * {@link java.awt.Graphics2D#drawGlyphVector} contract. Only a {@link MinecraftGlyphVector} carries
+     * the pack strike bitmaps and sidecar layout this renderer blits, so a foreign {@code GlyphVector}
+     * implementation is rejected with {@link IllegalArgumentException} rather than silently
+     * mis-rendered: real AWT would reduce it to bare glyph codes and drop both the pack positions and
+     * the pack pixels (measured - see {@link MinecraftGlyphVector}). {@code x} and {@code y} are read
+     * as the mcPixel origin, matching {@link #drawString}, and the current colour tints mono glyphs.
+     *
+     * @param g the glyph vector, which must be a {@link MinecraftGlyphVector}
+     * @param x the run origin X in mcPixels
+     * @param y the run origin Y in mcPixels (baseline for mono glyphs)
+     * @throws IllegalArgumentException when {@code g} is not a {@link MinecraftGlyphVector}
+     */
+    @Override
+    public void drawGlyphVector(@NotNull GlyphVector g, float x, float y) {
+        if (!(g instanceof MinecraftGlyphVector vector))
+            throw new IllegalArgumentException(
+                "MinecraftGraphics can only draw a MinecraftGlyphVector; a foreign GlyphVector ("
+                    + g.getClass().getName() + ") carries no pack strike bitmaps, and AWT would reduce it to glyph "
+                    + "codes, dropping the pack layout. Lay text out via MinecraftFont.layout(String).");
+        drawGlyphVector(vector, Math.round(x), Math.round(y), getColor());
     }
 
     /**

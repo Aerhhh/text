@@ -159,6 +159,108 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         return Optional.empty();
     }
 
+    /**
+     * Walks a run of text, emitting each resolved glyph at its cumulative pen and returning the total
+     * signed advance. This is the single accumulation loop behind all three text surfaces:
+     * {@link MinecraftGraphics#drawString drawString} drives it directly (no vector allocation on the
+     * hot path), {@link MinecraftFontMetrics#stringAdvanceX metrics} sums it with a
+     * {@link GlyphSink#NOOP no-op} sink, and {@link MinecraftGlyphVector#of layout} materializes a
+     * vector from it. Because measure, draw, and layout share this one walk, they agree on width and
+     * position by construction rather than by keeping parallel loops in step.
+     * <p>
+     * Pens accumulate from {@link MinecraftGlyph#signedAdvance()} as a {@code double}, so fractional
+     * and negative advances (space providers) are exact; rounding happens only at blit time. The sink
+     * receives the canonical cached glyph plus its pen separately - it is not handed a
+     * {@link MinecraftGlyph#at stamped} copy - so the draw hot path allocates nothing per glyph.
+     *
+     * @param text the text to walk
+     * @param sink receives each glyph and its cumulative pen X in output pixels
+     * @return the total signed advance in output pixels
+     */
+    default double walk(@NotNull String text, @NotNull GlyphSink sink) {
+        double pen = 0.0;
+        int i = 0;
+        while (i < text.length()) {
+            int codepoint = text.codePointAt(i);
+            i += Character.charCount(codepoint);
+
+            MinecraftGlyph glyph = glyph(codepoint);
+            sink.accept(glyph, pen);
+            pen += glyph.signedAdvance();
+        }
+        return pen;
+    }
+
+    // --- awt interop surface (backs MinecraftGlyphVector's GlyphVector contract) ---
+
+    /**
+     * The backing AWT {@link java.awt.Font} this font's glyph codes resolve against, and the font a
+     * {@link MinecraftGlyphVector#getFont()} returns. {@link Vanilla} hands back the {@code .otf} it
+     * loaded; {@link Color} lazily {@link java.awt.Font#createFont createFont}s its merged {@code .ttf}
+     * bytes once and shares that instance across every font id built from the same bytes.
+     *
+     * @return the backing AWT font
+     */
+    @NotNull java.awt.Font awtFont();
+
+    /**
+     * The {@link FontRenderContext} the backing font and its glyph codes resolve under. {@link Vanilla}
+     * reuses its rasterization context; {@link Color} uses an identity-transform, antialiased default
+     * (it never rasterizes vector outlines - its art is {@code sbix} strikes).
+     *
+     * @return the render context
+     */
+    @NotNull FontRenderContext fontRenderContext();
+
+    /**
+     * Resolves a codepoint to a real glyph id in {@link #awtFont() the backing font}'s {@code cmap},
+     * caching per font. This backs the {@link MinecraftGlyphVector#getGlyphCode glyph-code} surface for
+     * glyphs that carry no sidecar gid - vanilla atlas glyphs and space providers; colour raster glyphs
+     * report their sidecar gid directly. A codepoint the backing font lacks resolves to {@code 0}
+     * ({@code .notdef}), which is the honest answer.
+     *
+     * @param codepoint the Unicode codepoint
+     * @return the glyph id in the backing font
+     */
+    int glyphCode(int codepoint);
+
+    /**
+     * Resolves a codepoint to its glyph id through a font's {@code cmap} by laying out the single
+     * character and reading the resulting glyph code. Shared by both kinds' {@link #glyphCode} caches.
+     *
+     * @param font the backing AWT font
+     * @param frc the render context to resolve under
+     * @param codepoint the Unicode codepoint
+     * @return the glyph id, or {@code 0} when the font has no glyph for the codepoint
+     */
+    static int resolveGlyphCode(@NotNull java.awt.Font font, @NotNull FontRenderContext frc, int codepoint) {
+        return font.createGlyphVector(frc, new String(Character.toChars(codepoint))).getGlyphCode(0);
+    }
+
+    /**
+     * Receives each glyph a {@link #walk} emits, together with its cumulative pen position. The glyph
+     * is the canonical cached instance (pen {@code 0}); the pen is passed separately so the walk need
+     * not allocate a {@link MinecraftGlyph#at stamped} copy on the draw hot path.
+     */
+    @FunctionalInterface
+    interface GlyphSink {
+
+        /**
+         * A sink that discards every glyph - used by {@link MinecraftFontMetrics} to drive the walk
+         * purely for its returned total advance.
+         */
+        @NotNull GlyphSink NOOP = (glyph, penX) -> {};
+
+        /**
+         * Accepts one walked glyph.
+         *
+         * @param glyph the canonical cached glyph (pen {@code 0})
+         * @param penX the cumulative pen position of this occurrence, in output pixels (may be negative)
+         */
+        void accept(@NotNull MinecraftGlyph glyph, double penX);
+
+    }
+
     // --- cache root ---
 
     /**
@@ -309,6 +411,14 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         @Getter(AccessLevel.NONE)
         private final @NotNull ConcurrentMap<Integer, MinecraftGlyph> glyphCache;
 
+        /**
+         * Per-font {@code codepoint -> cmap gid} cache backing the {@link MinecraftGlyphVector}
+         * glyph-code surface. Distinct from {@link #glyphCache}: that holds rasterized bitmaps, this
+         * holds only integer glyph ids resolved through the AWT font's {@code cmap}.
+         */
+        @Getter(AccessLevel.NONE)
+        private final @NotNull ConcurrentMap<Integer, Integer> gidCache;
+
         Vanilla(@NotNull String fileName, @NotNull Style style, @NotNull String fontId) {
             Resolved resolved = resolveFont(fileName);
             this.actual = resolved.font();
@@ -316,6 +426,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             this.style = style;
             this.fontId = FontId.parse(fontId);
             this.glyphCache = Concurrent.newMap();
+            this.gidCache = Concurrent.newMap();
 
             BufferedImage temp = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = temp.createGraphics();
@@ -370,6 +481,21 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             GlyphVector vector = this.actual.createGlyphVector(this.awtFrc, new String(Character.toChars(codepoint)));
             Shape outline = vector.getGlyphOutline(0);
             return Optional.of(AffineTransform.getTranslateInstance(penX, 0).createTransformedShape(outline));
+        }
+
+        @Override
+        public @NotNull java.awt.Font awtFont() {
+            return this.actual;
+        }
+
+        @Override
+        public @NotNull FontRenderContext fontRenderContext() {
+            return this.awtFrc;
+        }
+
+        @Override
+        public int glyphCode(int codepoint) {
+            return this.gidCache.computeIfAbsent(codepoint, cp -> resolveGlyphCode(this.actual, this.awtFrc, cp));
         }
 
         /**
@@ -523,11 +649,26 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
          */
         public static final @NotNull String SIDECAR_NAME = "colour-glyphs.json";
 
+        /**
+         * The render context colour-font glyph codes resolve under: an identity transform with
+         * antialiasing and fractional metrics on. A colour font never rasterizes vector outlines (its
+         * art is {@code sbix} strikes), so the context only needs to be stable and shared - the merged
+         * {@code cmap} lookups it feeds are transform-independent.
+         */
+        private static final @NotNull FontRenderContext COLOR_FRC = new FontRenderContext(new AffineTransform(), true, true);
+
         private final @NotNull FontId fontId;
         private final @NotNull SharedStrikes strikes;
         private final @NotNull ColorGlyphSidecar sidecar;
         private final @NotNull MinecraftFont monoFallback;
         private final @NotNull MinecraftFontMetrics metrics;
+
+        /**
+         * Per-font {@code codepoint -> cmap gid} cache backing the {@link MinecraftGlyphVector}
+         * glyph-code surface for this font's non-raster glyphs (mono fallback and space providers);
+         * raster glyphs report their sidecar gid directly and never reach this cache.
+         */
+        private final @NotNull ConcurrentMap<Integer, Integer> gidCache;
 
         /**
          * Per-codepoint glyph cache. Uniform {@link #glyph(int)} surface with the vanilla atlas over a
@@ -547,6 +688,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             this.sidecar = sidecar;
             this.monoFallback = monoFallback;
             this.glyphCache = Concurrent.newMap();
+            this.gidCache = Concurrent.newMap();
 
             MinecraftFontMetrics mono = monoFallback.metrics();
             this.metrics = new MinecraftFontMetrics(this, mono.getFont(), mono.getAscent(), mono.getDescent(), mono.getHeight());
@@ -711,6 +853,21 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             return this.monoFallback.monoOutline(codepoint, penX);
         }
 
+        @Override
+        public @NotNull java.awt.Font awtFont() {
+            return this.strikes.awtFont();
+        }
+
+        @Override
+        public @NotNull FontRenderContext fontRenderContext() {
+            return COLOR_FRC;
+        }
+
+        @Override
+        public int glyphCode(int codepoint) {
+            return this.gidCache.computeIfAbsent(codepoint, cp -> resolveGlyphCode(awtFont(), COLOR_FRC, cp));
+        }
+
         /**
          * @return the underlying {@code sbix} reader (shared per file)
          */
@@ -765,26 +922,63 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             private static final @NotNull ConcurrentMap<String, SharedStrikes> BY_CONTENT = Concurrent.newMap();
 
             private final @NotNull SbixReader reader;
+            private final byte @NotNull [] fontBytes;
             private final @NotNull ConcurrentMap<Long, Optional<PixelBuffer>> strikeCache;
+            private volatile java.awt.Font awtFont;
 
-            private SharedStrikes(@NotNull SbixReader reader) {
+            private SharedStrikes(@NotNull SbixReader reader, byte @NotNull [] fontBytes) {
                 this.reader = reader;
+                this.fontBytes = fontBytes;
                 this.strikeCache = Concurrent.newMap();
             }
 
             /**
              * Returns the shared store for the given font bytes, constructing (and parsing) a
-             * {@link SbixReader} exactly once per distinct byte content and reusing it thereafter.
+             * {@link SbixReader} exactly once per distinct byte content and reusing it thereafter. The
+             * bytes are retained (the same array the reader already holds - no copy) so the backing AWT
+             * font can be built lazily from them.
              *
              * @param ttf the raw colour {@code .ttf} bytes
              * @return the shared store keyed by the bytes' content hash
              */
             static @NotNull SharedStrikes forBytes(byte @NotNull [] ttf) {
-                return BY_CONTENT.computeIfAbsent(contentKey(ttf), ignored -> new SharedStrikes(new SbixReader(ttf)));
+                return BY_CONTENT.computeIfAbsent(contentKey(ttf), ignored -> new SharedStrikes(new SbixReader(ttf), ttf));
             }
 
             @NotNull SbixReader reader() {
                 return this.reader;
+            }
+
+            /**
+             * Lazily builds - then shares across every font id backed by these same bytes - the AWT
+             * {@link java.awt.Font} the merged colour {@code .ttf} maps to. It answers the
+             * {@link MinecraftGlyphVector} glyph-code and {@link MinecraftGlyphVector#getFont() font}
+             * surface honestly: its {@code cmap} yields the real gids and it is the font the vector
+             * reports. It is never rasterized (colour art lives in {@code sbix}, which AWT paints
+             * blank), so it is deliberately not registered with the {@link GraphicsEnvironment}.
+             *
+             * @return the backing AWT font, created once per distinct byte content
+             */
+            @NotNull java.awt.Font awtFont() {
+                java.awt.Font font = this.awtFont;
+                if (font == null) {
+                    synchronized (this) {
+                        font = this.awtFont;
+                        if (font == null) {
+                            font = createAwtFont(this.fontBytes);
+                            this.awtFont = font;
+                        }
+                    }
+                }
+                return font;
+            }
+
+            private static @NotNull java.awt.Font createAwtFont(byte @NotNull [] ttf) {
+                try (InputStream in = new ByteArrayInputStream(ttf)) {
+                    return Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(FONT_POINT_SIZE);
+                } catch (IOException | FontFormatException ex) {
+                    throw new IllegalStateException("Unable to create the backing AWT font from the colour '.ttf' bytes", ex);
+                }
             }
 
             @NotNull Optional<PixelBuffer> strike(int gid, int ppem) {
