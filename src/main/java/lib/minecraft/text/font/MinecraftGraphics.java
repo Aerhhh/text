@@ -59,15 +59,29 @@ public class MinecraftGraphics extends PixelGraphics {
         int cx = translateX() + xMcPx * pxPerMcPx;
         int cy = translateY() + yMcPx * pxPerMcPx;
 
+        int argb = colorArgb();
         for (int i = 0; i < str.length(); i++) {
             int cp = str.charAt(i);
             MinecraftFont.GlyphData glyph = this.currentMcFont.glyph(cp);
-            blitGlyph(glyph, cx, cy);
+            blitGlyph(glyph, cx, cy, argb);
             cx += glyph.advanceWidth();
         }
     }
 
-    private void blitGlyph(@NotNull MinecraftFont.GlyphData glyph, int x, int y) {
+    /**
+     * Blits one glyph at buffer coordinates {@code (x, y)}, offset by the glyph's bearing.
+     * <p>
+     * Monochrome glyphs are tinted: each pixel's alpha is multiplied against {@code tintArgb}'s
+     * RGB (the vanilla text path). Colour glyphs ({@link MinecraftFont.GlyphData#color()}) carry
+     * their own RGBA artwork and are blitted natively - {@code tintArgb} is ignored - so pack
+     * {@code sbix} strikes keep their authored colours.
+     *
+     * @param glyph the glyph to blit
+     * @param x the buffer X of the cursor
+     * @param y the buffer Y of the cursor
+     * @param tintArgb the tint applied to monochrome glyphs (ignored for colour glyphs)
+     */
+    void blitGlyph(@NotNull MinecraftFont.GlyphData glyph, int x, int y, int tintArgb) {
         PixelBuffer bitmap = glyph.bitmap();
         int bw = bitmap.width();
         int bh = bitmap.height();
@@ -77,9 +91,10 @@ public class MinecraftGraphics extends PixelGraphics {
         int tw = target.width();
         int th = target.height();
 
-        int tintR = ColorMath.red(colorArgb());
-        int tintG = ColorMath.green(colorArgb());
-        int tintB = ColorMath.blue(colorArgb());
+        boolean color = glyph.color();
+        int tintR = ColorMath.red(tintArgb);
+        int tintG = ColorMath.green(tintArgb);
+        int tintB = ColorMath.blue(tintArgb);
 
         Shape clipShape = getClip();
         int clipX0 = clipShape instanceof Rectangle c ? c.x : 0;
@@ -97,10 +112,50 @@ public class MinecraftGraphics extends PixelGraphics {
                 int px = gx + bx;
                 if (px < clipX0 || px >= clipX1) continue;
 
-                int tinted = ColorMath.pack(alpha, tintR, tintG, tintB);
+                int source = color ? pixel : ColorMath.pack(alpha, tintR, tintG, tintB);
                 int dst = target.getPixel(px, py);
-                target.setPixel(px, py, ColorMath.blend(tinted, dst, BlendMode.NORMAL));
+                target.setPixel(px, py, ColorMath.blend(source, dst, BlendMode.NORMAL));
             }
+        }
+    }
+
+    // --- colour glyph vector rendering ---
+
+    /**
+     * Paints a {@link MinecraftGlyphVector} at an mcPixel origin using the current colour as the
+     * mono-glyph tint.
+     *
+     * @param vector the laid-out colour run
+     * @param xMcPx the run origin X in mcPixels
+     * @param yMcPx the run origin Y in mcPixels (baseline for mono glyphs)
+     */
+    public void drawGlyphVector(@NotNull MinecraftGlyphVector vector, int xMcPx, int yMcPx) {
+        drawGlyphVector(vector, xMcPx, yMcPx, getColor());
+    }
+
+    /**
+     * Paints a {@link MinecraftGlyphVector} at an mcPixel origin.
+     * <p>
+     * Raster glyphs blit their native {@code sbix} strike (untinted); mono fallback glyphs are
+     * tinted by {@code fill}; space glyphs paint nothing. Pen positions come from the vector's
+     * sidecar-driven layout - Java2D's zeroed {@code GlyphVector} advances are never consulted.
+     *
+     * @param vector the laid-out colour run
+     * @param xMcPx the run origin X in mcPixels
+     * @param yMcPx the run origin Y in mcPixels (baseline for mono glyphs)
+     * @param fill the tint applied to mono glyphs
+     */
+    public void drawGlyphVector(@NotNull MinecraftGlyphVector vector, int xMcPx, int yMcPx, @NotNull Color fill) {
+        int pxPerMcPx = MinecraftFont.MC_PIXEL_SCALE;
+        int cx = translateX() + xMcPx * pxPerMcPx;
+        int cy = translateY() + yMcPx * pxPerMcPx;
+        int fillArgb = fill.getRGB();
+
+        for (int i = 0; i < vector.glyphCount(); i++) {
+            MinecraftGlyphVector.PositionedGlyph positioned = vector.positionedGlyph(i);
+            MinecraftFont.GlyphData glyph = positioned.glyph();
+            if (glyph == null) continue;   // space glyph or a strike that failed to decode
+            blitGlyph(glyph, cx + (int) Math.round(positioned.penX()), cy, fillArgb);
         }
     }
 

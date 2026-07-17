@@ -122,4 +122,18 @@ public final class MinecraftFontMetrics extends FontMetrics {
         return this.height / MinecraftFont.MC_PIXEL_SCALE;
     }
 
+    /**
+     * Lays out a run of pack colour text into a {@link MinecraftGlyphVector}. The factory entry
+     * point for colour glyph runs: the vector positions from the colour font's sidecar advances
+     * and falls back to this metrics family's vanilla atlas for any codepoint the pack does not
+     * define.
+     *
+     * @param colorFont the colour font to lay out
+     * @param text the text to lay out
+     * @return the positioned colour glyph vector
+     */
+    public @NotNull MinecraftGlyphVector colorGlyphVector(@NotNull MinecraftColorFont colorFont, @NotNull String text) {
+        return MinecraftGlyphVector.layout(colorFont, text);
+    }
+
 }

@@ -59,6 +59,12 @@ final class ColorFontFixtures {
         return new SbixReader(bytes("SynthColour-edge.ttf"));
     }
 
-    // Colour-font-backed helpers (demoFont/altFont) are added alongside the pack colour-font layer.
+    static @NotNull MinecraftColorFont demoFont() {
+        return MinecraftColorFont.of(DEMO, SbixStrikeCache.of(bytes("SynthColour-demo.ttf")), sidecar(), MinecraftFont.REGULAR);
+    }
+
+    static @NotNull MinecraftColorFont altFont() {
+        return MinecraftColorFont.of(ALT, SbixStrikeCache.of(bytes("SynthColour-alt.ttf")), sidecar(), MinecraftFont.REGULAR);
+    }
 
 }
