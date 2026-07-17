@@ -9,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.Reader;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -19,8 +20,15 @@ import java.util.Set;
  * <p>
  * The sidecar is the versioned, forward-compatible contract between the font generator and the
  * runtime. It carries the per-{@code (font_id, codepoint)} rows the vanilla font tables cannot
- * express - signed and fractional advances, glyph origins, and the {@code sbix} strike each glyph
- * lives in - plus the {@code font_id -> file} mapping for the per-font {@code .ttf} files.
+ * express - signed and fractional advances, glyph origins, the stored codepoint each glyph occupies
+ * in the merged font, and the {@code sbix} strike each glyph lives in.
+ * <p>
+ * Schema v2 collapsed the colour output to one merged {@code .ttf} per pack: the top level names a
+ * single {@code file}, and every glyph row carries a {@code stored_codepoint} - the synthetic
+ * plane-15/16 codepoint the merged font's {@code cmap} keys on, which lets codepoints that different
+ * font ids reuse coexist in one font. The bridge is pack + original codepoint -&gt; row -&gt;
+ * {@code stored_codepoint} / {@code gid} -&gt; the one file. The older v1 shape (a
+ * {@code font_id -> file} map, no stored codepoints) still parses.
  * <p>
  * Parsing is tolerant: any member not modelled here is retained verbatim (see
  * {@link GlyphRow#unknown()} and {@link #unknown()}) so a newer generator can add optional fields
@@ -34,7 +42,7 @@ public final class ColorGlyphSidecar {
      * version is rejected fail-loud, because a bumped version signals a breaking shape change
      * (additive optional fields keep the version and are absorbed by the unknown-field tolerance).
      */
-    public static final int MAX_SUPPORTED_SCHEMA = 1;
+    public static final int MAX_SUPPORTED_SCHEMA = 2;
 
     /**
      * Default units-per-em assumed when a sidecar omits {@code units_per_em}. Mirrors the font
@@ -47,7 +55,9 @@ public final class ColorGlyphSidecar {
     private final @Nullable String generatorVersion;
     private final int unitsPerEm;
     private final @NotNull String graphicType;
+    private final @Nullable String file;
     private final @NotNull Map<FontId, String> files;
+    private final @NotNull Set<FontId> fontIds;
     private final @NotNull Map<FontIdCp, GlyphRow> index;
     private final @NotNull Map<String, JsonElement> unknown;
 
@@ -56,7 +66,9 @@ public final class ColorGlyphSidecar {
         @Nullable String generatorVersion,
         int unitsPerEm,
         @NotNull String graphicType,
+        @Nullable String file,
         @NotNull Map<FontId, String> files,
+        @NotNull Set<FontId> fontIds,
         @NotNull Map<FontIdCp, GlyphRow> index,
         @NotNull Map<String, JsonElement> unknown
     ) {
@@ -64,7 +76,9 @@ public final class ColorGlyphSidecar {
         this.generatorVersion = generatorVersion;
         this.unitsPerEm = unitsPerEm;
         this.graphicType = graphicType;
+        this.file = file;
         this.files = files;
+        this.fontIds = fontIds;
         this.index = index;
         this.unknown = unknown;
     }
@@ -87,6 +101,8 @@ public final class ColorGlyphSidecar {
         int unitsPerEm = root.has("units_per_em") ? root.get("units_per_em").getAsInt() : DEFAULT_UNITS_PER_EM;
         String graphicType = root.has("graphic_type") ? root.get("graphic_type").getAsString() : "png ";
 
+        // v2: one merged file for the whole pack. v1: a per-font-id {font_id -> file} map.
+        String file = root.has("file") && !root.get("file").isJsonNull() ? root.get("file").getAsString() : null;
         Map<FontId, String> files = new HashMap<>();
         if (root.has("fonts")) {
             for (JsonElement fontElement : root.getAsJsonArray("fonts")) {
@@ -97,20 +113,24 @@ public final class ColorGlyphSidecar {
         }
 
         Map<FontIdCp, GlyphRow> index = new HashMap<>();
+        Set<FontId> fontIds = new HashSet<>(files.keySet());
         if (root.has("glyphs")) {
             for (JsonElement glyphElement : root.getAsJsonArray("glyphs")) {
                 GlyphRow row = parseRow(glyphElement.getAsJsonObject());
                 index.put(new FontIdCp(row.fontId(), row.codepoint()), row);
+                fontIds.add(row.fontId());
             }
         }
 
         Map<String, JsonElement> unknown = retainUnknown(root, TOP_LEVEL_KNOWN);
-        return new ColorGlyphSidecar(schemaVersion, generatorVersion, unitsPerEm, graphicType, files, index, unknown);
+        return new ColorGlyphSidecar(schemaVersion, generatorVersion, unitsPerEm, graphicType, file, files, fontIds, index, unknown);
     }
 
     private static @NotNull GlyphRow parseRow(@NotNull JsonObject glyph) {
         FontId fontId = FontId.parse(glyph.get("font_id").getAsString());
         int codepoint = glyph.get("codepoint").getAsInt();
+        Integer storedCodepoint = glyph.has("stored_codepoint") && !glyph.get("stored_codepoint").isJsonNull()
+            ? glyph.get("stored_codepoint").getAsInt() : null;
         String glyphName = optionalString(glyph, "glyphName", "glyph_name");
         Integer gid = glyph.has("gid") && !glyph.get("gid").isJsonNull() ? glyph.get("gid").getAsInt() : null;
         double advance = glyph.has("advance") ? glyph.get("advance").getAsDouble() : 0.0;
@@ -132,7 +152,7 @@ public final class ColorGlyphSidecar {
             ? glyph.get("strike_ppem").getAsInt() : null;
 
         Map<String, JsonElement> unknown = retainUnknown(glyph, ROW_KNOWN);
-        return new GlyphRow(fontId, codepoint, glyphName, gid, advance, originX, originY, strikePpem, unknown);
+        return new GlyphRow(fontId, codepoint, storedCodepoint, glyphName, gid, advance, originX, originY, strikePpem, unknown);
     }
 
     /**
@@ -147,13 +167,27 @@ public final class ColorGlyphSidecar {
     }
 
     /**
-     * Returns the {@code .ttf} file basename for a font id.
+     * Returns the {@code .ttf} file basename backing a font id.
+     * <p>
+     * Under schema v2 a single merged file serves every font id the sidecar knows (from a glyph or
+     * space row, or the legacy {@code fonts} map), so a registered font id resolves to that one
+     * file; an unknown font id is empty, preserving the fail-loud load path. Under the legacy v1
+     * shape the per-font-id map is consulted instead.
      *
      * @param fontId the font id
      * @return the file basename, or empty when the font id is not registered
      */
     public @NotNull Optional<String> fileFor(@NotNull FontId fontId) {
+        if (this.file != null && this.fontIds.contains(fontId)) return Optional.of(this.file);
         return Optional.ofNullable(this.files.get(fontId));
+    }
+
+    /**
+     * @return the single merged colour {@code .ttf} basename (schema v2), or empty for the legacy
+     * per-font-id shape or a space-only pack that wrote no file
+     */
+    public @NotNull Optional<String> file() {
+        return Optional.ofNullable(this.file);
     }
 
     /**
@@ -205,10 +239,10 @@ public final class ColorGlyphSidecar {
     }
 
     private static final Set<String> TOP_LEVEL_KNOWN =
-        Set.of("schema_version", "generator_version", "source_date_epoch", "units_per_em", "graphic_type", "fonts", "glyphs");
+        Set.of("schema_version", "generator_version", "source_date_epoch", "units_per_em", "graphic_type", "file", "fonts", "glyphs");
 
     private static final Set<String> ROW_KNOWN =
-        Set.of("font_id", "codepoint", "glyphName", "glyph_name", "gid", "advance", "origin", "originOffsetX", "originOffsetY", "strike_ppem");
+        Set.of("font_id", "codepoint", "stored_codepoint", "glyphName", "glyph_name", "gid", "advance", "origin", "originOffsetX", "originOffsetY", "strike_ppem");
 
     /**
      * Composite {@code (font_id, codepoint)} index key.

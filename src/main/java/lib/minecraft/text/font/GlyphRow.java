@@ -24,7 +24,10 @@ import java.util.Optional;
  * {@link #glyphName()} is advisory only.
  *
  * @param fontId the owning font id
- * @param codepoint the Unicode codepoint this row maps
+ * @param codepoint the original Unicode codepoint this row maps (the pack's own codepoint)
+ * @param storedCodepoint the synthetic plane-15/16 codepoint the merged font actually carries in
+ * its {@code cmap}, or {@code null} for space rows; distinct font ids that reuse an original
+ * codepoint get distinct stored codepoints, which is how one merged font resolves the collision
  * @param glyphName the advisory glyph name, or {@code null} for space rows
  * @param gid the glyph id in the font's glyph order, or {@code null} for space rows
  * @param advance the signed advance in font units (verbatim; may be negative or fractional)
@@ -36,6 +39,7 @@ import java.util.Optional;
 public record GlyphRow(
     @NotNull FontId fontId,
     int codepoint,
+    @Nullable Integer storedCodepoint,
     @Nullable String glyphName,
     @Nullable Integer gid,
     double advance,
@@ -70,6 +74,15 @@ public record GlyphRow(
      */
     public @NotNull Optional<Integer> strikePpemOptional() {
         return Optional.ofNullable(this.strikePpem);
+    }
+
+    /**
+     * The stored codepoint as an {@link Optional}, empty for space rows.
+     *
+     * @return the stored codepoint, or empty
+     */
+    public @NotNull Optional<Integer> storedCodepointOptional() {
+        return Optional.ofNullable(this.storedCodepoint);
     }
 
 }
