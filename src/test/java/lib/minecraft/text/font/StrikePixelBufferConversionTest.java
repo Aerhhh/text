@@ -52,7 +52,7 @@ class StrikePixelBufferConversionTest {
     @Test
     @DisplayName("every fixture strike caches pixel-identically as PixelBuffer and as BufferedImage")
     void pixelExactAcrossEveryFixtureStrike() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
 
         int comparedStrikes = 0;
@@ -79,7 +79,7 @@ class StrikePixelBufferConversionTest {
     }
 
     /**
-     * Mirrors {@link MinecraftColorFont}'s private {@code toArgb}: normalise any decoded image to
+     * Mirrors {@link MinecraftFont.Color}'s private {@code toArgb}: normalise any decoded image to
      * {@code TYPE_INT_ARGB} so its {@code getRGB} equals the pixels the runtime wraps into a
      * {@link PixelBuffer}. Identity for images that already decode to {@code TYPE_INT_ARGB}.
      */
@@ -95,7 +95,7 @@ class StrikePixelBufferConversionTest {
     @Test
     @DisplayName("caching PixelBuffer instead of BufferedImage sheds the per-strike object-graph overhead")
     void pixelBufferRetainsFewerBytesThanBufferedImage() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         SbixReader reader = new SbixReader(ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF));
 
         long biTotal = 0;

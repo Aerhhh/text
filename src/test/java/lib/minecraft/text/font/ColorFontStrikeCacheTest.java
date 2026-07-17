@@ -16,18 +16,18 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.sameInstance;
 
-@DisplayName("MinecraftColorFont decodes each sbix strike once, as a PixelBuffer, and is thread-safe")
-class MinecraftColorFontStrikeCacheTest {
+@DisplayName("MinecraftFont.Color decodes each sbix strike once, as a PixelBuffer, and is thread-safe")
+class ColorFontStrikeCacheTest {
 
-    private static @NotNull MinecraftColorFont edgeFont() {
-        return MinecraftColorFont.of(ColorFontFixtures.DEMO,
+    private static @NotNull MinecraftFont.Color edgeFont() {
+        return MinecraftFont.Color.of(ColorFontFixtures.DEMO,
             ColorFontFixtures.bytes("SynthColour-edge.ttf"), ColorFontFixtures.sidecar(), MinecraftFont.Vanilla.REGULAR);
     }
 
     @Test
     @DisplayName("decodes at most once per (gid, ppem) - repeated lookups return the same PixelBuffer")
     void singleDecodePerKey() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         PixelBuffer first = font.strike(ColorFontFixtures.GID_FLAT, 8).orElseThrow();
         PixelBuffer second = font.strike(ColorFontFixtures.GID_FLAT, 8).orElseThrow();
         assertThat(second, sameInstance(first));
@@ -36,7 +36,7 @@ class MinecraftColorFontStrikeCacheTest {
     @Test
     @DisplayName("the decoded PixelBuffer pixels match the source cell colours")
     void decodedPixelsMatchSource() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         PixelBuffer flat = font.strike(ColorFontFixtures.GID_FLAT, 8).orElseThrow();
         assertThat(flat.width(), is(8));
         assertThat(flat.height(), is(8));
@@ -47,17 +47,17 @@ class MinecraftColorFontStrikeCacheTest {
     @Test
     @DisplayName("an absent strike slot and a non-png record decode to empty")
     void absentAndNonPngDecodeEmpty() {
-        MinecraftColorFont demo = ColorFontFixtures.demoFont();
+        MinecraftFont.Color demo = ColorFontFixtures.demoFont();
         assertThat(demo.strike(ColorFontFixtures.GID_FLAT, 16), is(Optional.empty()));   // flat glyph not present in strike 16
 
-        MinecraftColorFont edge = edgeFont();
+        MinecraftFont.Color edge = edgeFont();
         assertThat(edge.strike(3, 8), is(Optional.empty()));    // gid 3 is a 'jpg ' record
     }
 
     @Test
     @DisplayName("concurrent lookups return one identical cached PixelBuffer")
     void concurrentLookupsShareOneBuffer() throws Exception {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         int threads = 16;
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         try {

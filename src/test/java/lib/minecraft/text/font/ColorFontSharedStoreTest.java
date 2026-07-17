@@ -17,14 +17,14 @@ import static org.hamcrest.Matchers.sameInstance;
  * decode value-equal strikes, so only {@code sameInstance} distinguishes a shared cache from a
  * duplicated one. {@code demoFont()} and {@code altFont()} both load {@link ColorFontFixtures#MERGED_TTF}.
  */
-@DisplayName("MinecraftColorFont shares one sbix strike store across every font id of a file")
-class MinecraftColorFontSharedStoreTest {
+@DisplayName("MinecraftFont.Color shares one sbix strike store across every font id of a file")
+class ColorFontSharedStoreTest {
 
     @Test
     @DisplayName("two fonts loaded from the same bytes share the same strike store and reader instance")
     void sameFileSharesStoreAndReader() {
-        MinecraftColorFont demo = ColorFontFixtures.demoFont();
-        MinecraftColorFont alt = ColorFontFixtures.altFont();
+        MinecraftFont.Color demo = ColorFontFixtures.demoFont();
+        MinecraftFont.Color alt = ColorFontFixtures.altFont();
 
         assertThat(demo.strikes(), sameInstance(alt.strikes()));
         assertThat(demo.reader(), sameInstance(alt.reader()));
@@ -33,8 +33,8 @@ class MinecraftColorFontSharedStoreTest {
     @Test
     @DisplayName("a strike decoded through one font is a cache hit through the other")
     void strikeDecodedByOneFontIsCacheHitForTheOther() {
-        MinecraftColorFont demo = ColorFontFixtures.demoFont();
-        MinecraftColorFont alt = ColorFontFixtures.altFont();
+        MinecraftFont.Color demo = ColorFontFixtures.demoFont();
+        MinecraftFont.Color alt = ColorFontFixtures.altFont();
 
         // Decode once via demo; the shared store must hand alt back the very same PixelBuffer.
         PixelBuffer viaDemo = demo.strike(ColorFontFixtures.GID_ALT_FLAT, 8).orElseThrow();
@@ -45,8 +45,8 @@ class MinecraftColorFontSharedStoreTest {
     @Test
     @DisplayName("distinct file bytes get distinct strike stores")
     void differentFilesDoNotShareAStore() {
-        MinecraftColorFont merged = ColorFontFixtures.demoFont();
-        MinecraftColorFont edge = MinecraftColorFont.of(ColorFontFixtures.DEMO,
+        MinecraftFont.Color merged = ColorFontFixtures.demoFont();
+        MinecraftFont.Color edge = MinecraftFont.Color.of(ColorFontFixtures.DEMO,
             ColorFontFixtures.bytes("SynthColour-edge.ttf"), ColorFontFixtures.sidecar(), MinecraftFont.Vanilla.REGULAR);
 
         assertThat(merged.strikes(), not(sameInstance(edge.strikes())));

@@ -14,7 +14,7 @@ import java.util.Map;
  * itself. This reader does exactly that with nothing beyond {@code java.nio}-style byte access: it
  * walks the sfnt table directory, reads {@code maxp.numGlyphs}, locates {@code sbix}, and for any
  * {@code (gid, ppem)} returns the raw PNG payload byte-for-byte. Decoding and caching are left to
- * {@link MinecraftColorFont}'s internal strike cache so this class stays dependency-free.
+ * {@link MinecraftFont.Color}'s internal strike cache so this class stays dependency-free.
  * <p>
  * The per-glyph offset array of each strike has {@code numGlyphs + 1} entries covering every glyph
  * in glyph order; an empty glyph has {@code offset[gid + 1] == offset[gid]}. A {@code dupe} record

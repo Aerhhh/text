@@ -31,9 +31,9 @@ class ColorFontConformanceTest {
     }
 
     @Test
-    @DisplayName("MinecraftColorFont.load resolves the font id and its .ttf from the classpath")
+    @DisplayName("MinecraftFont.Color.load resolves the font id and its .ttf from the classpath")
     void loadsFromClasspath() {
-        MinecraftColorFont font = MinecraftColorFont.load(ColorFontFixtures.DEMO);
+        MinecraftFont.Color font = MinecraftFont.Color.load(ColorFontFixtures.DEMO);
         assertThat(font.fontId(), is(ColorFontFixtures.DEMO));
         assertThat(font.sidecar().unitsPerEm(), is(1024));
         assertThat(font.reader().numGlyphs(), is(ColorFontFixtures.NUM_GLYPHS));
@@ -43,14 +43,14 @@ class ColorFontConformanceTest {
     @DisplayName("loading an unregistered font id fails loud, naming the font id")
     void loadUnknownFontIdFailsLoud() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-            () -> MinecraftColorFont.load(FontId.parse("synth:missing")));
+            () -> MinecraftFont.Color.load(FontId.parse("synth:missing")));
         assertTrue(ex.getMessage().contains("synth:missing"));
     }
 
     @Test
     @DisplayName("the MinecraftFont registry registers and returns the same instance per font id")
     void registryStoresByFontId() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftFont.register(font);
         assertThat(MinecraftFont.get(ColorFontFixtures.DEMO).orElseThrow(), sameInstance(font));
 
@@ -69,8 +69,8 @@ class ColorFontConformanceTest {
     @Test
     @DisplayName("the same PUA codepoint resolves to different native art per font id through the one merged file")
     void puaDisambiguationThroughSingleFile() {
-        MinecraftColorFont demo = MinecraftColorFont.load(ColorFontFixtures.DEMO);
-        MinecraftColorFont alt = MinecraftColorFont.load(ColorFontFixtures.ALT);
+        MinecraftFont.Color demo = MinecraftFont.Color.load(ColorFontFixtures.DEMO);
+        MinecraftFont.Color alt = MinecraftFont.Color.load(ColorFontFixtures.ALT);
 
         // both font ids are served by the single merged .ttf named at the top level of the sidecar
         assertThat(demo.sidecar().file().orElseThrow(), is(ColorFontFixtures.MERGED_TTF));
@@ -91,7 +91,7 @@ class ColorFontConformanceTest {
     @Test
     @DisplayName("two original codepoints sharing a content-deduped gid resolve to one shared strike surface")
     void dedupSharedGidResolvesSameArt() {
-        MinecraftColorFont font = MinecraftColorFont.load(ColorFontFixtures.DEMO);
+        MinecraftFont.Color font = MinecraftFont.Color.load(ColorFontFixtures.DEMO);
 
         MinecraftGlyph flat = font.glyph(ColorFontFixtures.CP_FLAT);
         MinecraftGlyph dup = font.glyph(ColorFontFixtures.CP_FLAT_DUP);

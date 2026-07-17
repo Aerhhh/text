@@ -1,5 +1,6 @@
 package lib.minecraft.text.font;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 
@@ -20,23 +21,16 @@ import java.awt.FontMetrics;
 @Getter
 public final class MinecraftFontMetrics extends FontMetrics {
 
-    @Getter(lombok.AccessLevel.NONE)
+    @Getter(AccessLevel.NONE)
     private final @NotNull MinecraftFont mcFont;
 
     private final int ascent;
     private final int descent;
     private final int height;
 
-    private MinecraftFontMetrics(@NotNull MinecraftFont mcFont, @NotNull Font awtFont, int ascent, int descent, int height) {
-        super(awtFont);
-        this.mcFont = mcFont;
-        this.ascent = ascent;
-        this.descent = descent;
-        this.height = height;
-    }
-
     /**
-     * Builds metrics bound to a font.
+     * Builds metrics bound to a font. The {@link FontMetrics} superclass requires the AWT font at
+     * construction, so this is the only entry point - there is no separate factory.
      *
      * @param mcFont the font these metrics measure
      * @param awtFont the underlying AWT font (vanilla's own font, or a colour font's mono-fallback
@@ -44,10 +38,13 @@ public final class MinecraftFontMetrics extends FontMetrics {
      * @param ascent the ascent in output pixels
      * @param descent the descent in output pixels
      * @param height the line height in output pixels
-     * @return the metrics
      */
-    static @NotNull MinecraftFontMetrics of(@NotNull MinecraftFont mcFont, @NotNull Font awtFont, int ascent, int descent, int height) {
-        return new MinecraftFontMetrics(mcFont, awtFont, ascent, descent, height);
+    public MinecraftFontMetrics(@NotNull MinecraftFont mcFont, @NotNull Font awtFont, int ascent, int descent, int height) {
+        super(awtFont);
+        this.mcFont = mcFont;
+        this.ascent = ascent;
+        this.descent = descent;
+        this.height = height;
     }
 
     /**
@@ -103,21 +100,6 @@ public final class MinecraftFontMetrics extends FontMetrics {
     @Override
     public int charWidth(char ch) {
         return Math.round((float) advanceOf(ch));
-    }
-
-    @Override
-    public int getAscent() {
-        return this.ascent;
-    }
-
-    @Override
-    public int getDescent() {
-        return this.descent;
-    }
-
-    @Override
-    public int getHeight() {
-        return this.height;
     }
 
     /**

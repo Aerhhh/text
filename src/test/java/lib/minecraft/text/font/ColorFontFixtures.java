@@ -78,12 +78,12 @@ final class ColorFontFixtures {
         return new SbixReader(bytes("SynthColour-edge.ttf"));
     }
 
-    static @NotNull MinecraftColorFont demoFont() {
-        return MinecraftColorFont.of(DEMO, bytes(MERGED_TTF), sidecar(), MinecraftFont.Vanilla.REGULAR);
+    static @NotNull MinecraftFont.Color demoFont() {
+        return MinecraftFont.Color.of(DEMO, bytes(MERGED_TTF), sidecar(), MinecraftFont.Vanilla.REGULAR);
     }
 
-    static @NotNull MinecraftColorFont altFont() {
-        return MinecraftColorFont.of(ALT, bytes(MERGED_TTF), sidecar(), MinecraftFont.Vanilla.REGULAR);
+    static @NotNull MinecraftFont.Color altFont() {
+        return MinecraftFont.Color.of(ALT, bytes(MERGED_TTF), sidecar(), MinecraftFont.Vanilla.REGULAR);
     }
 
 }

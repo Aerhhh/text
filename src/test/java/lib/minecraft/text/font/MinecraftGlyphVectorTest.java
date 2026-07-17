@@ -28,7 +28,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("pen positions come from cumulative sidecar advances, not GlyphVector positions")
     void layoutPositionsFromSidecar() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT).repeat(3));
 
         assertThat(vector.glyphCount(), is(3));
@@ -42,7 +42,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("measure equals draw: MinecraftFontMetrics.stringAdvanceX == MinecraftGlyphVector.advanceX")
     void measureEqualsDraw() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         String text = cp(ColorFontFixtures.CP_FLAT) + cp(ColorFontFixtures.CP_FRAC_SPACE) + cp(ColorFontFixtures.CP_DOWNSCALED);
         MinecraftGlyphVector vector = font.layout(text);
 
@@ -53,7 +53,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("a raster glyph paints its native strike pixels, byte-for-byte")
     void rasterBlitPixelIdentical() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
 
         PixelBuffer target = PixelBuffer.create(16, 16);
@@ -84,7 +84,7 @@ class MinecraftGlyphVectorTest {
               ]
             }
             """));
-        MinecraftColorFont font = MinecraftColorFont.of(ColorFontFixtures.DEMO,
+        MinecraftFont.Color font = MinecraftFont.Color.of(ColorFontFixtures.DEMO,
             ColorFontFixtures.bytes(ColorFontFixtures.MERGED_TTF), sidecar, MinecraftFont.Vanilla.REGULAR);
 
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
@@ -106,7 +106,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("a colour raster glyph is never tinted by the fill colour")
     void rasterGlyphNotTinted() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector vector = font.layout(cp(ColorFontFixtures.CP_FLAT));
 
         PixelBuffer target = PixelBuffer.create(16, 16);
@@ -121,7 +121,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("a negative-advance space provider moves the pen backward and paints nothing")
     void spaceProviderNegativeAdvance() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         String text = cp(ColorFontFixtures.CP_FLAT) + cp(ColorFontFixtures.CP_NEG_SPACE) + cp(ColorFontFixtures.CP_FLAT);
         MinecraftGlyphVector vector = font.layout(text);
 
@@ -135,7 +135,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("a fractional pen rounds identically for measure and draw")
     void fractionalAdvanceRoundingConsistent() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         String text = cp(ColorFontFixtures.CP_FLAT) + cp(ColorFontFixtures.CP_FRAC_SPACE) + cp(ColorFontFixtures.CP_FLAT);
         MinecraftGlyphVector vector = font.layout(text);
 
@@ -147,7 +147,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("a codepoint not in the sidecar falls back to the vanilla mono atlas")
     void monoFallbackForUnlistedCodepoint() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector vector = font.layout("A");   // 0x41 is not a pack colour glyph
 
         MinecraftGlyph glyph = vector.positionedGlyph(0);
@@ -159,8 +159,8 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("the same PUA codepoint resolves to different artwork under different font ids")
     void puaCollisionDisambiguatedByFontId() {
-        MinecraftColorFont demo = ColorFontFixtures.demoFont();
-        MinecraftColorFont alt = ColorFontFixtures.altFont();
+        MinecraftFont.Color demo = ColorFontFixtures.demoFont();
+        MinecraftFont.Color alt = ColorFontFixtures.altFont();
 
         // the same original codepoint (E001) resolves to different merged gids per font id
         PixelBuffer demoStrike = demo.strike(ColorFontFixtures.GID_FLAT, 8).orElseThrow();
@@ -174,7 +174,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("strike selection follows the sidecar strike_ppem (downscaled art uses a larger ppem)")
     void strikeSelectionFollowsPpem() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector flat = font.layout(cp(ColorFontFixtures.CP_FLAT));
         MinecraftGlyphVector downscaled = font.layout(cp(ColorFontFixtures.CP_DOWNSCALED));
 
@@ -188,7 +188,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("knockout subtracts overlapping mono outlines and is empty for raster glyphs")
     void knockoutAreaOnMonoOutlines() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         MinecraftGlyphVector vector = font.layout("AB" + cp(ColorFontFixtures.CP_FLAT));
 
         assertTrue(vector.outline(0).isPresent());   // mono A
@@ -260,7 +260,7 @@ class MinecraftGlyphVectorTest {
     @Test
     @DisplayName("a mixed mono + colour + space run paints through one layout call with zero caller branching")
     void mixedRunPaintsThroughOneCall() {
-        MinecraftColorFont font = ColorFontFixtures.demoFont();
+        MinecraftFont.Color font = ColorFontFixtures.demoFont();
         String text = "A" + cp(ColorFontFixtures.CP_FRAC_SPACE) + cp(ColorFontFixtures.CP_FLAT);
         MinecraftGlyphVector vector = font.layout(text);
 
