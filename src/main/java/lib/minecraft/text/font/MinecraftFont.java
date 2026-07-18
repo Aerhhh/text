@@ -36,7 +36,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The unified home for every Minecraft-style font, whether a vanilla monospace atlas or a pack
@@ -194,14 +193,14 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
     // --- awt interop surface (backs MinecraftGlyphVector's GlyphVector contract) ---
 
     /**
-     * The backing AWT {@link java.awt.Font} this font's glyph codes resolve against, and the font a
+     * The backing AWT {@link Font} this font's glyph codes resolve against, and the font a
      * {@link MinecraftGlyphVector#getFont()} returns. {@link Vanilla} hands back the {@code .otf} it
-     * loaded; {@link Color} lazily {@link java.awt.Font#createFont createFont}s its merged {@code .ttf}
+     * loaded; {@link Color} lazily {@link Font#createFont createFont}s its merged {@code .ttf}
      * bytes once and shares that instance across every font id built from the same bytes.
      *
      * @return the backing AWT font
      */
-    @NotNull java.awt.Font awtFont();
+    @NotNull Font awtFont();
 
     /**
      * The {@link FontRenderContext} the backing font and its glyph codes resolve under. {@link Vanilla}
@@ -233,7 +232,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
      * @param codepoint the Unicode codepoint
      * @return the glyph id, or {@code 0} when the font has no glyph for the codepoint
      */
-    static int resolveGlyphCode(@NotNull java.awt.Font font, @NotNull FontRenderContext frc, int codepoint) {
+    static int resolveGlyphCode(@NotNull Font font, @NotNull FontRenderContext frc, int codepoint) {
         return font.createGlyphVector(frc, new String(Character.toChars(codepoint))).getGlyphCode(0);
     }
 
@@ -379,7 +378,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         /**
          * The underlying AWT font, retained for lazy glyph rasterization.
          */
-        private final @NotNull java.awt.Font actual;
+        private final @NotNull Font actual;
 
         /**
          * Filesystem path to the backing {@code .otf} file. Guaranteed to exist after construction.
@@ -484,7 +483,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         }
 
         @Override
-        public @NotNull java.awt.Font awtFont() {
+        public @NotNull Font awtFont() {
             return this.actual;
         }
 
@@ -586,7 +585,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         /**
          * Reads an {@code .otf} file from disk, registers it with AWT, and derives to the native load size.
          */
-        private static @NotNull java.awt.Font createFontFromPath(@NotNull Path otfPath) {
+        private static @NotNull Font createFontFromPath(@NotNull Path otfPath) {
             try (InputStream in = Files.newInputStream(otfPath)) {
                 Font font = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(FONT_POINT_SIZE);
                 GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
@@ -610,7 +609,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         /**
          * Internal result of {@link #resolveFont}: the loaded AWT font plus the on-disk path of its {@code .otf}.
          */
-        private record Resolved(@NotNull java.awt.Font font, @NotNull Path path) {}
+        private record Resolved(@NotNull Font font, @NotNull Path path) {}
 
     }
 
@@ -854,7 +853,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         }
 
         @Override
-        public @NotNull java.awt.Font awtFont() {
+        public @NotNull Font awtFont() {
             return this.strikes.awtFont();
         }
 
@@ -924,7 +923,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             private final @NotNull SbixReader reader;
             private final byte @NotNull [] fontBytes;
             private final @NotNull ConcurrentMap<Long, Optional<PixelBuffer>> strikeCache;
-            private volatile java.awt.Font awtFont;
+            private volatile Font awtFont;
 
             private SharedStrikes(@NotNull SbixReader reader, byte @NotNull [] fontBytes) {
                 this.reader = reader;
@@ -951,7 +950,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
 
             /**
              * Lazily builds - then shares across every font id backed by these same bytes - the AWT
-             * {@link java.awt.Font} the merged colour {@code .ttf} maps to. It answers the
+             * {@link Font} the merged colour {@code .ttf} maps to. It answers the
              * {@link MinecraftGlyphVector} glyph-code and {@link MinecraftGlyphVector#getFont() font}
              * surface honestly: its {@code cmap} yields the real gids and it is the font the vector
              * reports. It is never rasterized (colour art lives in {@code sbix}, which AWT paints
@@ -959,8 +958,8 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
              *
              * @return the backing AWT font, created once per distinct byte content
              */
-            @NotNull java.awt.Font awtFont() {
-                java.awt.Font font = this.awtFont;
+            @NotNull Font awtFont() {
+                Font font = this.awtFont;
                 if (font == null) {
                     synchronized (this) {
                         font = this.awtFont;
@@ -973,7 +972,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
                 return font;
             }
 
-            private static @NotNull java.awt.Font createAwtFont(byte @NotNull [] ttf) {
+            private static @NotNull Font createAwtFont(byte @NotNull [] ttf) {
                 try (InputStream in = new ByteArrayInputStream(ttf)) {
                     return Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(FONT_POINT_SIZE);
                 } catch (IOException | FontFormatException ex) {
@@ -1085,7 +1084,7 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
      */
     final class Registry {
 
-        static final @NotNull java.util.concurrent.ConcurrentMap<FontId, MinecraftFont> MAP = new ConcurrentHashMap<>();
+        static final @NotNull ConcurrentMap<FontId, MinecraftFont> MAP = Concurrent.newMap();
 
         private static volatile boolean vanillaRegistered = false;
 

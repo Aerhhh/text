@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.Graphics2D;
 import java.awt.Shape;
 import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphJustificationInfo;
@@ -18,7 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * A laid-out run of pack text as a {@link java.awt.font.GlyphVector} subclass whose positions and
+ * A laid-out run of pack text as a {@link GlyphVector} subclass whose positions and
  * glyph codes come from the pack, not from AWT.
  * <p>
  * The vector is honest everywhere our own pipeline or an honest introspection actually reads it.
@@ -41,7 +42,7 @@ import java.util.Optional;
  * corrupt a layout; {@link #getGlyphTransform} returns {@code null} - the legal "no transform" answer.
  * <p>
  * <strong>Interop note (measured on real AWT, not assumed).</strong> Handing this vector to a real
- * {@link java.awt.Graphics2D#drawGlyphVector} does not paint pack text, which is why the stubs cost
+ * {@link Graphics2D#drawGlyphVector} does not paint pack text, which is why the stubs cost
  * nothing in practice. A probe on JDK 21.0.10 and JDK 25.0.2 built a faithful foreign
  * {@code GlyphVector} subclass (real gids, custom wide-spread pen positions) and drew it through a
  * headless AWT {@code Graphics2D}. On both JDKs, AWT called only {@code getGlyphCodes(0, n)} - never
@@ -85,7 +86,7 @@ public final class MinecraftGlyphVector extends GlyphVector {
      * Each codepoint resolves through {@link MinecraftFont#glyph(int)}: a vanilla atlas glyph, a
      * colour {@code sbix} strike, or a space provider all arrive as a {@link MinecraftGlyph}. Pen
      * positions accumulate from {@link MinecraftGlyph#signedAdvance()} - never from
-     * {@link java.awt.font.GlyphVector#getGlyphPosition}, which {@code sbix} zeroes - and each glyph is
+     * {@link GlyphVector#getGlyphPosition}, which {@code sbix} zeroes - and each glyph is
      * stamped with its pen through {@link MinecraftGlyph#at(double)} for the vector-based callers that
      * read {@link #positionedGlyph(int)}.
      *
@@ -183,7 +184,7 @@ public final class MinecraftGlyphVector extends GlyphVector {
 
     /**
      * The Minecraft font this vector was laid out for. Distinct from the {@code GlyphVector} contract's
-     * {@link #getFont()}, which returns the backing AWT {@link java.awt.Font}.
+     * {@link #getFont()}, which returns the backing AWT {@link Font}.
      *
      * @return the Minecraft font this vector was laid out for
      */
@@ -194,7 +195,7 @@ public final class MinecraftGlyphVector extends GlyphVector {
     // --- java.awt.font.GlyphVector contract: honest surface ---
 
     /**
-     * The backing AWT {@link java.awt.Font} - {@link MinecraftFont#awtFont()}. For a colour font this
+     * The backing AWT {@link Font} - {@link MinecraftFont#awtFont()}. For a colour font this
      * is the merged {@code .ttf}; its {@code cmap} produces the gids {@link #getGlyphCode(int)}
      * reports, so the two agree. AWT will still paint that font's empty-{@code glyf} colour glyphs
      * blank (see the class interop note), which is the documented degradation.
