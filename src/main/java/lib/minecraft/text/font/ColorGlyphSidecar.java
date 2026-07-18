@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,6 +37,7 @@ import java.util.Set;
  * without breaking an older reader. A {@code schema_version} above {@link #MAX_SUPPORTED_SCHEMA}
  * is rejected with a named {@link UnsupportedSchemaException}.
  */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class ColorGlyphSidecar {
 
     /**
@@ -61,27 +64,6 @@ public final class ColorGlyphSidecar {
     private final @NotNull Map<FontIdCp, GlyphRow> index;
     private final @NotNull Map<String, JsonElement> unknown;
 
-    private ColorGlyphSidecar(
-        int schemaVersion,
-        @Nullable String generatorVersion,
-        int unitsPerEm,
-        @NotNull String graphicType,
-        @Nullable String file,
-        @NotNull Map<FontId, String> files,
-        @NotNull Set<FontId> fontIds,
-        @NotNull Map<FontIdCp, GlyphRow> index,
-        @NotNull Map<String, JsonElement> unknown
-    ) {
-        this.schemaVersion = schemaVersion;
-        this.generatorVersion = generatorVersion;
-        this.unitsPerEm = unitsPerEm;
-        this.graphicType = graphicType;
-        this.file = file;
-        this.files = files;
-        this.fontIds = fontIds;
-        this.index = index;
-        this.unknown = unknown;
-    }
 
     /**
      * Parses a sidecar from a JSON reader.

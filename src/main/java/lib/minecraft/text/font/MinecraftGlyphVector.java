@@ -1,5 +1,7 @@
 package lib.minecraft.text.font;
 
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.Color;
@@ -67,17 +69,12 @@ import java.util.Optional;
  * as a {@code double} so fractional and negative pens (space providers) are exact; rounding happens
  * only at blit time.
  */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class MinecraftGlyphVector extends GlyphVector {
 
     private final @NotNull MinecraftFont font;
     private final @NotNull List<MinecraftGlyph> glyphs;
     private final double advanceX;
-
-    private MinecraftGlyphVector(@NotNull MinecraftFont font, @NotNull List<MinecraftGlyph> glyphs, double advanceX) {
-        this.font = font;
-        this.glyphs = glyphs;
-        this.advanceX = advanceX;
-    }
 
     /**
      * Lays out a run of text for any font by materializing {@link MinecraftFont#walk the walk} into a
