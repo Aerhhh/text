@@ -644,7 +644,14 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
         public static final @NotNull String RESOURCE_DIR = "colorfont";
 
         /**
-         * Shared sidecar filename.
+         * Legacy fixed sidecar filename, kept as the discovery fallback.
+         * <p>
+         * The generator now writes one sidecar per pack, named
+         * {@code Minecraft-<Namespace>.colour-glyphs.json} beside the pack's merged
+         * {@code Minecraft-<Namespace>.ttf} (see {@link #sidecarNameFor(FontId)} for the exact
+         * naming rule). Discovery derives that per-pack name from the font id first and only falls
+         * back to this fixed name, so a single-sidecar layout - and every fixture that predates the
+         * per-pack split - still resolves.
          */
         public static final @NotNull String SIDECAR_NAME = "colour-glyphs.json";
 
@@ -735,37 +742,105 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
          * @throws IllegalStateException when the sidecar, the font id, or its {@code .ttf} cannot be found
          */
         public static @NotNull Color load(@NotNull FontId fontId, @NotNull MinecraftFont monoFallback) {
-            ColorGlyphSidecar sidecar = loadSidecar();
+            ColorGlyphSidecar sidecar = loadSidecar(fontId);
             String file = sidecar.fileFor(fontId).orElseThrow(() -> new IllegalStateException(
-                "Colour sidecar '" + SIDECAR_NAME + "' does not list font id '" + fontId + "'."));
+                "The resolved colour sidecar does not list font id '" + fontId + "'."));
             return of(fontId, loadTtfBytes(file), sidecar, monoFallback);
         }
 
-        private static @NotNull ColorGlyphSidecar loadSidecar() {
-            String classpath = RESOURCE_DIR + "/" + SIDECAR_NAME;
+        /**
+         * Derives the per-pack sidecar resource basename for a font id, mirroring the generator's
+         * naming rule so the runtime looks for exactly what the generator wrote.
+         * <p>
+         * The generator emits one merged sidecar per pack named
+         * {@code Minecraft-<Namespace>.colour-glyphs.json}, beside the pack's merged
+         * {@code Minecraft-<Namespace>.ttf}, where {@code <Namespace>} is the font id's
+         * {@link FontId#namespace() namespace} with its first character upper-cased and the rest left
+         * untouched (e.g. namespace {@code hypixel} yields {@code Minecraft-Hypixel.colour-glyphs.json}).
+         * The {@code .ttf} basename itself is not derived here - it continues to come from the
+         * resolved sidecar's {@code file} field.
+         *
+         * @param fontId the font id whose pack sidecar is being resolved
+         * @return the per-pack sidecar resource basename
+         */
+        static @NotNull String sidecarNameFor(@NotNull FontId fontId) {
+            String namespace = fontId.namespace();
+            String capitalized = namespace.isEmpty()
+                ? namespace
+                : Character.toUpperCase(namespace.charAt(0)) + namespace.substring(1);
+            return "Minecraft-" + capitalized + "." + SIDECAR_NAME;
+        }
+
+        /**
+         * Loads the colour sidecar for a font id, preferring the per-pack name
+         * ({@link #sidecarNameFor(FontId)}) and falling back to the legacy fixed {@link #SIDECAR_NAME}.
+         * On a full miss the thrown message names both attempted resource basenames.
+         */
+        private static @NotNull ColorGlyphSidecar loadSidecar(@NotNull FontId fontId) {
+            return resolveSidecar(fontId, Color::loadSidecarNamed);
+        }
+
+        /**
+         * Resolves the colour sidecar through an injected {@code name -> parsed sidecar} loader,
+         * trying the per-pack name first and the legacy fixed name second. Package-private so the
+         * discovery order and the fail-loud message can be exercised without touching the classpath or
+         * the on-disk cache.
+         *
+         * @param fontId the font id whose sidecar is being resolved
+         * @param loader resolves a sidecar resource basename to a parsed sidecar, or empty when absent
+         * @return the resolved sidecar
+         * @throws IllegalStateException when neither name resolves, naming both attempts
+         */
+        static @NotNull ColorGlyphSidecar resolveSidecar(
+            @NotNull FontId fontId,
+            @NotNull java.util.function.Function<String, Optional<ColorGlyphSidecar>> loader
+        ) {
+            String perPack = sidecarNameFor(fontId);
+            Optional<ColorGlyphSidecar> resolved = loader.apply(perPack);
+            if (resolved.isPresent()) return resolved.get();
+
+            resolved = loader.apply(SIDECAR_NAME);
+            if (resolved.isPresent()) return resolved.get();
+
+            throw new IllegalStateException(sidecarMissMessage(perPack));
+        }
+
+        /**
+         * Loads a single sidecar resource basename from the classpath, then the user-home cache,
+         * returning empty when neither tier holds it.
+         */
+        private static @NotNull Optional<ColorGlyphSidecar> loadSidecarNamed(@NotNull String name) {
+            String classpath = RESOURCE_DIR + "/" + name;
             try (InputStream in = Color.class.getClassLoader().getResourceAsStream(classpath)) {
                 if (in != null) {
                     try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
-                        return ColorGlyphSidecar.parse(reader);
+                        return Optional.of(ColorGlyphSidecar.parse(reader));
                     }
                 }
             } catch (IOException ex) {
                 // Fall through to the cache tier.
             }
 
-            Path cached = MinecraftFont.defaultCacheRoot().resolve(RESOURCE_DIR).resolve(SIDECAR_NAME);
+            Path cached = MinecraftFont.defaultCacheRoot().resolve(RESOURCE_DIR).resolve(name);
             if (Files.isRegularFile(cached)) {
                 try (Reader reader = Files.newBufferedReader(cached, StandardCharsets.UTF_8)) {
-                    return ColorGlyphSidecar.parse(reader);
+                    return Optional.of(ColorGlyphSidecar.parse(reader));
                 } catch (IOException ex) {
                     throw new UncheckedIOException("Unable to read colour sidecar '" + cached + "'", ex);
                 }
             }
 
-            throw new IllegalStateException(
-                "Unable to load colour sidecar after all fallbacks.\n"
-                    + "  Tier 1 (classpath): /" + classpath + "\n"
-                    + "  Tier 2 (filesystem cache): " + cached);
+            return Optional.empty();
+        }
+
+        private static @NotNull String sidecarMissMessage(@NotNull String perPackName) {
+            Path cacheDir = MinecraftFont.defaultCacheRoot().resolve(RESOURCE_DIR);
+            return "Unable to load colour sidecar after all fallbacks.\n"
+                + "  Attempted names (per-pack first, then legacy):\n"
+                + "    '" + perPackName + "'\n"
+                + "    '" + SIDECAR_NAME + "'\n"
+                + "  Each looked up on Tier 1 (classpath /" + RESOURCE_DIR + "/) "
+                + "and Tier 2 (filesystem cache " + cacheDir + ").";
         }
 
         private static byte[] loadTtfBytes(@NotNull String file) {
