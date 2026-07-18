@@ -36,6 +36,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The unified home for every Minecraft-style font, whether a vanilla monospace atlas or a pack
@@ -639,21 +640,18 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
     final class Color implements MinecraftFont {
 
         /**
-         * Classpath / cache subdirectory the colour {@code .ttf} files and shared sidecar live under.
+         * Classpath / cache subdirectory the colour {@code .ttf} files and their per-pack sidecars
+         * live under.
          */
         public static final @NotNull String RESOURCE_DIR = "colorfont";
 
         /**
-         * Legacy fixed sidecar filename, kept as the discovery fallback.
-         * <p>
-         * The generator now writes one sidecar per pack, named
-         * {@code Minecraft-<Namespace>.colour-glyphs.json} beside the pack's merged
-         * {@code Minecraft-<Namespace>.ttf} (see {@link #sidecarNameFor(FontId)} for the exact
-         * naming rule). Discovery derives that per-pack name from the font id first and only falls
-         * back to this fixed name, so a single-sidecar layout - and every fixture that predates the
-         * per-pack split - still resolves.
+         * Filename suffix shared by every per-pack sidecar. The generator writes one sidecar per
+         * pack, named {@code Minecraft-<Namespace>.colour-glyphs.json} beside the pack's merged
+         * {@code Minecraft-<Namespace>.ttf}; {@link #sidecarNameFor(FontId)} derives the full
+         * basename from a font id's namespace.
          */
-        public static final @NotNull String SIDECAR_NAME = "colour-glyphs.json";
+        private static final @NotNull String SIDECAR_SUFFIX = "colour-glyphs.json";
 
         /**
          * The render context colour-font glyph codes resolve under: an identity transform with
@@ -768,41 +766,35 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             String capitalized = namespace.isEmpty()
                 ? namespace
                 : Character.toUpperCase(namespace.charAt(0)) + namespace.substring(1);
-            return "Minecraft-" + capitalized + "." + SIDECAR_NAME;
+            return "Minecraft-" + capitalized + "." + SIDECAR_SUFFIX;
         }
 
         /**
-         * Loads the colour sidecar for a font id, preferring the per-pack name
-         * ({@link #sidecarNameFor(FontId)}) and falling back to the legacy fixed {@link #SIDECAR_NAME}.
-         * On a full miss the thrown message names both attempted resource basenames.
+         * Loads the colour sidecar for a font id by its per-pack name
+         * ({@link #sidecarNameFor(FontId)}). A miss fails loud naming the attempted resource
+         * basename and both lookup tiers.
          */
         private static @NotNull ColorGlyphSidecar loadSidecar(@NotNull FontId fontId) {
             return resolveSidecar(fontId, Color::loadSidecarNamed);
         }
 
         /**
-         * Resolves the colour sidecar through an injected {@code name -> parsed sidecar} loader,
-         * trying the per-pack name first and the legacy fixed name second. Package-private so the
-         * discovery order and the fail-loud message can be exercised without touching the classpath or
-         * the on-disk cache.
+         * Resolves the colour sidecar through an injected {@code name -> parsed sidecar} loader.
+         * Package-private so the derived name and the fail-loud message can be exercised without
+         * touching the classpath or the on-disk cache.
          *
          * @param fontId the font id whose sidecar is being resolved
          * @param loader resolves a sidecar resource basename to a parsed sidecar, or empty when absent
          * @return the resolved sidecar
-         * @throws IllegalStateException when neither name resolves, naming both attempts
+         * @throws IllegalStateException when the per-pack name does not resolve
          */
         static @NotNull ColorGlyphSidecar resolveSidecar(
             @NotNull FontId fontId,
-            @NotNull java.util.function.Function<String, Optional<ColorGlyphSidecar>> loader
+            @NotNull Function<String, Optional<ColorGlyphSidecar>> loader
         ) {
-            String perPack = sidecarNameFor(fontId);
-            Optional<ColorGlyphSidecar> resolved = loader.apply(perPack);
-            if (resolved.isPresent()) return resolved.get();
-
-            resolved = loader.apply(SIDECAR_NAME);
-            if (resolved.isPresent()) return resolved.get();
-
-            throw new IllegalStateException(sidecarMissMessage(perPack));
+            String name = sidecarNameFor(fontId);
+            return loader.apply(name)
+                .orElseThrow(() -> new IllegalStateException(sidecarMissMessage(name)));
         }
 
         /**
@@ -833,13 +825,10 @@ public sealed interface MinecraftFont permits MinecraftFont.Vanilla, MinecraftFo
             return Optional.empty();
         }
 
-        private static @NotNull String sidecarMissMessage(@NotNull String perPackName) {
+        private static @NotNull String sidecarMissMessage(@NotNull String name) {
             Path cacheDir = MinecraftFont.defaultCacheRoot().resolve(RESOURCE_DIR);
-            return "Unable to load colour sidecar after all fallbacks.\n"
-                + "  Attempted names (per-pack first, then legacy):\n"
-                + "    '" + perPackName + "'\n"
-                + "    '" + SIDECAR_NAME + "'\n"
-                + "  Each looked up on Tier 1 (classpath /" + RESOURCE_DIR + "/) "
+            return "Unable to load colour sidecar '" + name + "'.\n"
+                + "  Looked up on Tier 1 (classpath /" + RESOURCE_DIR + "/) "
                 + "and Tier 2 (filesystem cache " + cacheDir + ").";
         }
 

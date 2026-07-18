@@ -64,7 +64,6 @@ public final class ColorGlyphSidecar {
     private final @NotNull Map<FontIdCp, GlyphRow> index;
     private final @NotNull Map<String, JsonElement> unknown;
 
-
     /**
      * Parses a sidecar from a JSON reader.
      *

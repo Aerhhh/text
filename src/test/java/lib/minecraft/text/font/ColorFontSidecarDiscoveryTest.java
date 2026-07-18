@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Covers the per-pack colour-sidecar discovery rule: the resource basename is derived from the font
- * id's namespace with the same first-character capitalization the generator uses, the per-pack name
- * is tried before the legacy fixed name, and a full miss fails loud naming both attempts.
+ * id's namespace with the same first-character capitalization the generator uses, and a miss fails
+ * loud naming the derived basename and both lookup tiers.
  */
 @DisplayName("Colour sidecar per-pack discovery")
 class ColorFontSidecarDiscoveryTest {
@@ -42,8 +42,8 @@ class ColorFontSidecarDiscoveryTest {
     }
 
     @Test
-    @DisplayName("the per-pack name resolves first and the legacy name is never consulted")
-    void perPackNameResolvesFirst() {
+    @DisplayName("resolution asks the loader for exactly the derived per-pack name")
+    void resolvesThroughDerivedName() {
         List<String> asked = new ArrayList<>();
         ColorGlyphSidecar perPack = sidecar("PerPack");
 
@@ -57,31 +57,15 @@ class ColorFontSidecarDiscoveryTest {
     }
 
     @Test
-    @DisplayName("a missing per-pack name falls back to the legacy fixed name")
-    void legacyNameResolvesAsFallback() {
-        List<String> asked = new ArrayList<>();
-        ColorGlyphSidecar legacy = sidecar("Legacy");
-
-        ColorGlyphSidecar resolved = MinecraftFont.Color.resolveSidecar(FontId.parse("synth:demo"), name -> {
-            asked.add(name);
-            return name.equals(MinecraftFont.Color.SIDECAR_NAME) ? Optional.of(legacy) : Optional.empty();
-        });
-
-        assertThat(resolved, sameInstance(legacy));
-        // per-pack is attempted before, and only before, the legacy name
-        assertThat(asked, contains("Minecraft-Synth.colour-glyphs.json", "colour-glyphs.json"));
-    }
-
-    @Test
-    @DisplayName("a full miss fails loud naming both the per-pack and the legacy name")
-    void fullMissNamesBothAttempts() {
+    @DisplayName("a miss fails loud naming the derived per-pack name and both lookup tiers")
+    void missNamesDerivedNameAndTiers() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
             () -> MinecraftFont.Color.resolveSidecar(FontId.parse("synth:demo"), name -> Optional.empty()));
 
         assertTrue(ex.getMessage().contains("'Minecraft-Synth.colour-glyphs.json'"),
-            "message should name the per-pack attempt: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("'colour-glyphs.json'"),
-            "message should name the legacy attempt: " + ex.getMessage());
+            "message should name the derived per-pack basename: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("classpath") && ex.getMessage().contains("cache"),
+            "message should name both lookup tiers: " + ex.getMessage());
     }
 
 }

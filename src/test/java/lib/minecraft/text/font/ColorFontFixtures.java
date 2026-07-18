@@ -61,7 +61,7 @@ final class ColorFontFixtures {
     }
 
     static @NotNull Reader sidecarReader() {
-        InputStream in = ColorFontFixtures.class.getClassLoader().getResourceAsStream("colorfont/colour-glyphs.json");
+        InputStream in = ColorFontFixtures.class.getClassLoader().getResourceAsStream("colorfont/Minecraft-Synth.colour-glyphs.json");
         if (in == null) throw new IllegalStateException("Missing colour sidecar fixture");
         return new InputStreamReader(in, StandardCharsets.UTF_8);
     }
